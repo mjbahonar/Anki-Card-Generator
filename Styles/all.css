@@ -323,13 +323,13 @@ image_anki {
 
 google_translate_aki {
   font-family: IRANSans, 'Open Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  direction: rtl;
-  text-align: right;
+  direction: ltr;
+  text-align: left;
   max-width: 600px;
-  margin: 30px auto;
-  padding: 20px;
+  margin: 3px auto;
+  padding: 3px;
   background-color: var(--bg-main);
-  border-radius: 12px;
+  border-radius: 3px;
 }
 
 /* ========================================================================================================================================================

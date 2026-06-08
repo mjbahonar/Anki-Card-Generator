@@ -13,7 +13,7 @@ DECK_ID = 2059400110
 #####################################################################
 ### Name of the Deck ###
 #####################################################################
-name_of_the_deck = "MJB"  ### Name of the Deck ###
+name_of_the_deck = "MJB-Norwegian Words"  ### Name of the Deck ###
 
 def generate_anki_package(df, output_path, media_folders, css_path):
     print("📦 Generating Anki Package...")
@@ -32,13 +32,13 @@ def generate_anki_package(df, output_path, media_folders, css_path):
         'Advanced Scraper Model',
         fields=[
             {'name': 'FrontField'},   # Word + Sound Tag
-            {'name': 'Audios'},       # Audio Field
+            #{'name': 'Audios'},       # Audio Field
             {'name': 'GoogleTrans'},  #
-            {'name': 'Images'},       #
-            {'name': 'Faraazin'},     #
-            {'name': 'BAmooz'},       #
+            #{'name': 'Images'},       #
+            #{'name': 'Faraazin'},     #
+            #{'name': 'BAmooz'},       #
             #{'name': 'Fastdic'},      #
-            {'name': 'Thesaurus'},
+            #{'name': 'Thesaurus'},
             {'name': 'Info'}    #
         ],
         #######################################################################
@@ -46,22 +46,12 @@ def generate_anki_package(df, output_path, media_folders, css_path):
         ### the HTML structure and include/exclude fields as needed.                ###
         #######################################################################
         templates=[{
-            'name': 'Card 1',
+            'name': 'Norwegian Words',
             'qfmt': '<div class="front">{{FrontField}}</div>',
             'afmt': '''
                 {{FrontSide}}
                 <hr id=answer>
-                {{Audios}}
-                <hr>
                 {{GoogleTrans}}
-                <hr>
-                {{Images}}
-                <hr>
-                {{Faraazin}}
-                <hr>
-                {{BAmooz}}
-                <hr>
-                {{Thesaurus}}
                 <hr>
                 {{Info}}
             ''',
@@ -78,13 +68,13 @@ def generate_anki_package(df, output_path, media_folders, css_path):
             model=anki_model,
             fields=[
                 str(row['Anki_Front_Field']),                   #
-                str(row['Fastdic_Audio']),                      #
+                #str(row['Fastdic_Audio']),                      #
                 str(row['Processed_Content_Google_Translate']), #
-                str(row['Downloaded_Images_HTML']),             #
-                str(row['Processed_Content_Faraazin_Selenium']),#
-                str(row['Processed_Content_B_Amooz']),          #
+                #str(row['Downloaded_Images_HTML']),             #
+                #str(row['Processed_Content_Faraazin_Selenium']),#
+                #str(row['Processed_Content_B_Amooz']),          #
                 #str(row['Processed_Content_Fastdic']),          #
-                str(row['Thesaurus_com']),                       #
+                #str(row['Thesaurus_com']),                       #
                 str(row['Info'])
             ]
         )

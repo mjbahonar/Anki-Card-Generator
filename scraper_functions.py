@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 import pyperclip
 import re
 from deep_translator import GoogleTranslator
+from gtts import gTTS
+import shutil
 
 
 ### Press CNTL+Shift+O to see the functions list in VSCode
@@ -245,13 +247,14 @@ def scrape_and_process_faraazin_with_selenium(word, word_number):
 def scrape_and_process_google_translate(word, word_number):
     time.sleep(1 + random.uniform(0, 2))
     try:
-        translated_text = GoogleTranslator(source='en', target='fa').translate(word)
-        print(f"Word {word_number}: '{word}' translated by Google Translate")
+        # Translate from Norwegian to English
+        translated_text = GoogleTranslator(source='no', target='en').translate(word)
+        print(f"Word {word_number}: '{word}' translated by Google Translate (NO→EN)")
 
         html_output = f"""
         <google_translate_aki>
-            <div class="gt-title">ترجمه از گوگل ترنزلیت:</div>
-            <div class="gt-text">{translated_text}</div>
+            <div class="gt-title">Google Translate (NO → EN):</div>
+            <div class="gt-text">   {translated_text}</div>
         </google_translate_aki>
         """.strip()
 
@@ -666,6 +669,55 @@ def scrape_and_process_fastdic_audio(word, word_number):
 
     except Exception as e:
         print(f"[FASTDICT AUDIO] ERROR: {e}")
+        return ""
+
+
+# =========================
+# Google TTS (Norwegian) Audio
+# =========================
+def scrape_and_process_google_tts_audio(word, word_number):
+    """
+    Generate Norwegian TTS using Google TTS (gTTS), save locally and to ADDRESS.
+    Returns an HTML audio tag referencing the saved filename.
+    """
+    try:
+        load_dotenv()
+        media_dir = os.getenv("ADDRESS")
+
+        local_audio_dir = os.path.join(os.getcwd(), "Audio")
+        os.makedirs(local_audio_dir, exist_ok=True)
+
+        if not media_dir:
+            print("[GTTSAUDIO] ERROR: ADDRESS not set")
+            return ""
+
+        safe_word = str(word).replace(' ', '_')
+        filename = f"google_no_{safe_word}.mp3"
+        local_path = os.path.join(local_audio_dir, filename)
+        media_path = os.path.join(media_dir, filename)
+
+        # Generate TTS and save locally
+        tts = gTTS(text=str(word), lang='no')
+        tts.save(local_path)
+
+        # Copy to media location
+        try:
+            shutil.copyfile(local_path, media_path)
+        except Exception as e:
+            print(f"[GTTSAUDIO] Warning: could not copy to ADDRESS: {e}")
+
+        print(f"[GTTSAUDIO] Saved Norwegian TTS for '{word}' as {filename}")
+
+        audio_html = f"""
+        <audio controls>
+            <source src="{filename}" type="audio/mpeg">
+        </audio>
+        """.strip()
+
+        return audio_html
+
+    except Exception as e:
+        print(f"[GTTSAUDIO] ERROR: {e}")
         return ""
 
 

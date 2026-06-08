@@ -18,7 +18,8 @@ from scraper_functions import (
     scrape_and_process_dictionary_com,
     scrape_and_process_thesaurus_com,
     scrape_and_process_fastdic_audio,
-    scrape_and_process_b_amooz
+    scrape_and_process_b_amooz,
+    scrape_and_process_google_tts_audio
 )
 
 # =================================================
@@ -63,7 +64,7 @@ info_text = """
 # =================================================
 # INPUT FILE
 # =================================================
-baseName = "Missing Notes of IELTS Essential"
+baseName = "New Words"
 excel_file_path = os.path.join(script_dir, baseName + ".xlsx")
 df = pd.read_excel(excel_file_path, header=None, names=["Words"])
 
@@ -71,17 +72,18 @@ df = pd.read_excel(excel_file_path, header=None, names=["Words"])
 # OUTPUT COLUMNS
 # =================================================
 COLUMNS = [
-    "Fastdic_Audio",
-    "Processed_Content_Google_Translate",
-    "Downloaded_Images_HTML",
-    "Processed_Content_Faraazin_Selenium",
-    "Processed_Content_B_Amooz",          
-    "Processed_Content_Fastdic",
-    "Dictionary_com",
-    "Thesaurus_com",
+    #"Fastdic_Audio",
+    #"Processed_Content_Google_Translate",
+    #"Downloaded_Images_HTML",
+    #"Processed_Content_Faraazin_Selenium",
+    #"Processed_Content_B_Amooz",          
+    #"Processed_Content_Fastdic",
+    #"Dictionary_com",
+    #"Thesaurus_com",
     #"Processed_Content_Google_Define_Selenium_processed",
     #"Processed_Content_Cambridge_Define_Selenium",
     "Anki_US_Sound_Tag",       
+    "Anki_NO_Sound_Tag",
     "Anki_Front_Field" ,
     "Info"       
 
@@ -110,14 +112,11 @@ def autosave(df, suffix="autosave"):
 # NON-SELENIUM TASK MAP
 # =================================================
 def run_non_selenium_tasks(word, word_number):
+    # Only use Google Translate (Norwegian -> English) and Info
     return {
-        "Processed_Content_Fastdic": scrape_and_process_fastdic(word, word_number),
-        "Processed_Content_B_Amooz": scrape_and_process_b_amooz(word, word_number),  
         "Processed_Content_Google_Translate": scrape_and_process_google_translate(word, word_number),
-        "Downloaded_Images_HTML": download_images(word, word_number, n=4),
-        #"Dictionary_com": scrape_and_process_dictionary_com(word, word_number),
-        "Thesaurus_com": scrape_and_process_thesaurus_com(word, word_number),
-        "Fastdic_Audio": scrape_and_process_fastdic_audio(word, word_number),
+        # Generate Norwegian TTS and return HTML audio tag (also saves files)
+        "gTTS Audio": scrape_and_process_google_tts_audio(word, word_number),
         "Info": info_text
     }
 
@@ -149,7 +148,7 @@ with keep.running():
                 results = future.result()
         else:
             results = run_non_selenium_tasks(word, word_number)
-
+ 
         for col, value in results.items():
             df.at[idx, col] = value
 
@@ -161,7 +160,7 @@ with keep.running():
         
         # Construct the filename structure: fastdic_word_us.mp3
         safe_word = word.replace(' ', '_') # Filename should use underscores if it has spaces
-        filename = f"fastdic_{safe_word}_us.mp3"
+        filename = f"google_no_{safe_word}.mp3"
         
         # Construct the Anki sound tag: [sound:filename]
         anki_sound_tag = f"[sound:{filename}]"
@@ -173,10 +172,7 @@ with keep.running():
         # This column will be mapped to the Front Field of your Anki card.
         df.at[idx, "Anki_Front_Field"] = f"{word} {anki_sound_tag}"    
 
-        # -------------------------------
-        # SELENIUM (SEQUENTIAL ONLY)
-        # -------------------------------
-        df.at[idx, "Processed_Content_Faraazin_Selenium"] = (scrape_and_process_faraazin_with_selenium(word, word_number))
+        # Selenium-based scrapers are disabled; only Google Translate is used.
         #df.at[idx, "Processed_Content_Google_Define_Selenium_processed"] = (scrape_and_process_google_define_with_selenium(word, word_number))
         #df.at[idx, "Processed_Content_Cambridge_Define_Selenium"] = (scrape_and_process_cambridge_define_with_selenium(word, word_number))
 

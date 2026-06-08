@@ -19,3 +19,4 @@ Pillow
 pyperclip
 
 genanki
+gTTS
