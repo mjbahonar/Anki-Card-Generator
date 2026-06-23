@@ -6,14 +6,14 @@ import os
 # =================================================
 # These identify your model and deck in Anki. 
 # If they change, Anki will create duplicates instead of updating.
-MODEL_ID = 1559328410
-DECK_ID = 2059400110
+MODEL_ID = 1559328412 #1559328410
+DECK_ID = 2059400112 #2059400110
 
 
 #####################################################################
 ### Name of the Deck ###
 #####################################################################
-name_of_the_deck = "MJB-Norwegian Words"  ### Name of the Deck ###
+name_of_the_deck = "Norwegian Words"  ### Name of the Deck ###
 
 def generate_anki_package(df, output_path, media_folders, css_path):
     print("📦 Generating Anki Package...")

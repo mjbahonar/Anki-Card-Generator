@@ -248,15 +248,16 @@ def scrape_and_process_google_translate(word, word_number):
     time.sleep(1 + random.uniform(0, 2))
     try:
         # Translate from Norwegian to English
-        translated_text = GoogleTranslator(source='no', target='en').translate(word)
+        translated_text = GoogleTranslator(source='no', target='fa').translate(word)
         print(f"Word {word_number}: '{word}' translated by Google Translate (NO→EN)")
 
         html_output = f"""
-        <google_translate_aki>
-            <div class="gt-title">Google Translate (NO → EN):</div>
-            <div class="gt-text">   {translated_text}</div>
-        </google_translate_aki>
-        """.strip()
+        <div class="gt-container">
+            <div class="gt-title">ترجمه خودکار</div>
+            <hr class="gt-separator">
+            <div class="gt-text">{translated_text}</div>
+        </div>
+            """.strip()
 
         return html_output
 

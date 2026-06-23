@@ -1,0 +1,86 @@
+/* Font definition for Anki */
+@font-face {
+    font-family: "Vazirmatn";
+    src: url("_Vazirmatn.ttf");
+    font-weight: normal;
+    font-style: normal;
+}
+
+/* Container styling */
+.gt-container {
+    font-family: "Vazirmatn", Tahoma, sans-serif;
+    background-color: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 15px;
+    margin: 15px auto;
+    max-width: 95%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    direction: rtl;
+}
+
+/* Title styling - Centered */
+.gt-title {
+    font-family: "Vazirmatn", Tahoma, sans-serif;
+    color: #5f6368;
+    font-size: 0.85em;
+    font-weight: bold;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+/* Separator line */
+.gt-separator {
+    border: 0;
+    height: 1px;
+    background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.1), rgba(0,0,0,0));
+    margin-bottom: 12px;
+}
+
+/* Main text styling - Right aligned */
+.gt-text {
+    font-family: "Vazirmatn", Tahoma, sans-serif;
+    color: #202124;
+    font-size: 1.1em;
+    line-height: 1.6;
+    text-align: right;
+    word-wrap: break-word;
+    letter-spacing: 0.2px;
+}
+
+/* Dark Mode Support (Automatic) */
+.nightMode .gt-container,
+:root[data-theme='dark'] .gt-container {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.nightMode .gt-title,
+:root[data-theme='dark'] .gt-title {
+    color: #bbbbbb;
+}
+
+.nightMode .gt-text,
+:root[data-theme='dark'] .gt-text {
+    color: #e8eaed;
+}
+
+.nightMode .gt-separator,
+:root[data-theme='dark'] .gt-separator {
+    background-image: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.1), rgba(255,255,255,0));
+}
+
+/* Mobile specific adjustment */
+@media (max-width: 600px) {
+    .gt-container {
+        padding: 12px;
+        margin: 10px 5px;
+    }
+
+    .gt-text {
+        font-size: 1em;
+    }
+}

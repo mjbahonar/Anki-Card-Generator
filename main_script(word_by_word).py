@@ -215,9 +215,10 @@ print("=" * 60)
 # Define paths for the Anki function
 media_folders = [
     os.path.join(script_dir, "Images"), #
-    os.path.join(script_dir, "Audio")   #
+    os.path.join(script_dir, "Audio") ,  #
+    os.path.join(script_dir, "fonts")   # 🔤 Vazirmatn font for Anki
 ]
-css_file = os.path.join(script_dir, "Styles", "all.css")
+css_file = os.path.join(script_dir, "Styles", "norway.css")
 apkg_output = os.path.join(output_dir, f"output_{timestamp}_{baseName}.apkg") #
 
 # Call the function from the new file
