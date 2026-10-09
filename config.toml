@@ -38,7 +38,8 @@ english_accent = "us"         # us or uk (Fastdic)
 # Only the input headword's sound is downloaded, not inflection/example audio.
 
 [runtime]
-timeout_seconds = 20
+timeout_seconds = 30
+source_timeout_seconds = 30    # Total network-work budget per word/source; 0 disables
 translation_attempts = 2
 retry_delay_seconds = 4
 word_delay_seconds = 0.5

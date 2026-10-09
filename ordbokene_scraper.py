@@ -39,10 +39,11 @@ def ordbokene_content(word, dictionary, ctx):
     source = 'bokmalsordboka' if dictionary == 'bm' else 'nynorskordboka'
     with ctx.page() as page:
         page.goto('https://ordbokene.no/eng/' + dictionary + '/' + quote(word, safe=''),
-                  wait_until='domcontentloaded', timeout=ctx.timeout * 1000)
-        page.locator('.article .article-title h3').first.wait_for()
+                  wait_until='networkidle', timeout=ctx.timeout * 1000)
+        page.locator('.article .article-title h3').first.wait_for(timeout=ctx.timeout * 1000)
         articles = page.locator('.article')
         for index in range(articles.count()):
+            ctx.check_budget()
             article = articles.nth(index)
             if not exact_article(article.inner_html(), word):
                 continue
@@ -51,8 +52,8 @@ def ordbokene_content(word, dictionary, ctx):
                 try:
                     button = buttons.nth(number)
                     if button.get_attribute('aria-expanded') != 'true':
-                        button.click()
-                    article.locator('table.infl-table').first.wait_for()
+                        button.click(timeout=ctx.timeout * 1000)
+                    article.locator('table.infl-table').first.wait_for(timeout=ctx.timeout * 1000)
                 except Exception as exc:
                     ctx.issue(word, source + '_inflection', exc)
             parts.append(render_article(article.inner_html()))

@@ -46,6 +46,8 @@ Generated files appear in `Output`. Start with `input.max_words = 3` for a small
 
 Relative paths are resolved from the configuration file's directory, regardless of the working directory. Sheet/column indices start at **0**. A column name requires `header = true`.
 
+`runtime.source_timeout_seconds = 30` sets a shared time budget for each word/source, including retries, multiple entry pages and inflection waits. Each network operation uses the remaining budget; after it expires the source is skipped and processing continues. `0` disables this budget. `runtime.timeout_seconds = 30` separately limits an individual network operation and also applies to audio requests. Cleanup and local processing may add a little time beyond the network budget.
+
 ### Switching to English
 
 In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `oxford`, `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the shared `model_id` can stay the same.

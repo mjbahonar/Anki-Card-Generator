@@ -49,8 +49,9 @@ def load_config(path):
         for key in keys:
             if key not in data[section]:
                 raise ConfigError(f'Missing {section}.{key}')
-        if section != 'sources' and set(data[section]) - set(keys):
-            raise ConfigError(f'Unknown setting in [{section}]: {set(data[section]) - set(keys)}')
+        optional = {'source_timeout_seconds'} if section == 'runtime' else set()
+        if section != 'sources' and set(data[section]) - set(keys) - optional:
+            raise ConfigError(f'Unknown setting in [{section}]: {set(data[section]) - set(keys) - optional}')
     if set(data) - set(required):
         raise ConfigError(f'Unknown configuration section: {set(data) - set(required)}')
     for section, keys in {
@@ -82,6 +83,9 @@ def load_config(path):
         value = data['runtime'][key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < (1 if key == 'timeout_seconds' else 0):
             raise ConfigError(f'runtime.{key} must be a valid non-negative number (timeout >= 1)')
+    limit = data['runtime'].get('source_timeout_seconds', 30)
+    if type(limit) not in (int, float) or not math.isfinite(limit) or limit < 0:
+        raise ConfigError('runtime.source_timeout_seconds must be finite and >= 0 (0 disables the source budget)')
     for key in ['sheet', 'word_column']:
         value = data['input'][key]
         if not ((type(value) is int and value >= 0) or (isinstance(value, str) and value.strip())):

@@ -24,6 +24,46 @@ ROOT = Path(__file__).resolve().parent
 
 
 class V4Tests(unittest.TestCase):
+    def test_expired_source_is_hidden_and_next_source_runs(self):
+        self.config.section('sources').clear()
+        self.config.section('sources').update(lexin={'enabled': True}, dict_com={'enabled': True})
+        self.config.section('output')['formats'] = ['json']
+        def content(name, word, number, context):
+            if name == 'lexin':
+                context.source_deadline = 0
+            return '<p>definition</p>'
+        with patch('main.dictionary_content', side_effect=content), patch('main.select_audio', return_value=''), redirect_stdout(io.StringIO()):
+            self.assertEqual(run(self.config), 0)
+        saved = next(p for p in self.directory.glob('*.json') if not p.name.endswith('_errors.json'))
+        data = json.loads(saved.read_text(encoding='utf-8'))
+        for row in data['words']:
+            self.assertEqual(row['lexin'], '')
+            self.assertIn('definition', row['dict_com'])
+        self.assertEqual(len(data['errors']), 2)
+
+    def test_source_budget_shrinks_request_timeout_and_resets(self):
+        self.config.section('runtime')['source_timeout_seconds'] = 5
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        with patch('sources.time.monotonic', return_value=100):
+            with context.source_budget():
+                with patch('sources.time.monotonic', return_value=103):
+                    self.assertEqual(context.timeout, 2)
+                with patch('sources.time.monotonic', return_value=106):
+                    with self.assertRaises(TimeoutError):
+                        context.fetch('https://example.com')
+        self.assertEqual(context.timeout, self.config.section('runtime')['timeout_seconds'])
+
+    def test_source_budget_caps_retry_delay_and_expires(self):
+        self.config.section('runtime')['source_timeout_seconds'] = 3
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        with patch('sources.time.monotonic', return_value=100):
+            with context.source_budget():
+                with patch('sources.time.sleep') as sleep:
+                    context.pause(50)
+                    sleep.assert_called_once_with(3)
+
     def test_ordbokene_exact_homographs_emphasis_and_inflection(self):
         from ordbokene_scraper import exact_article, render_article
         markup = '''<div class="article-title"><h3>bok<span class="hgno"><span class="sr-only">1</span>I</span></h3>
@@ -140,7 +180,7 @@ class V4Tests(unittest.TestCase):
     def test_config_rejects_nonfinite_numbers_and_oversized_ids(self):
         text = (ROOT / 'config.toml').read_text(encoding='utf-8')
         path = self.directory / 'invalid.toml'
-        for old, new, message in [('timeout_seconds = 20', 'timeout_seconds = nan', 'timeout_seconds'),
+        for old, new, message in [('timeout_seconds = 30', 'timeout_seconds = nan', 'timeout_seconds'),
                                   ('word_delay_seconds = 0.5', 'word_delay_seconds = inf', 'word_delay_seconds'),
                                   ('deck_id = 2059400451', 'deck_id = 9223372036854775808', 'SQLite')]:
             with self.subTest(message=message):

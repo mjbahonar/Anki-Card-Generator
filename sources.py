@@ -86,7 +86,8 @@ class SourceContext:
     def __init__(self, config):
         self.config = config
         self.language = config.section('language')['source']
-        self.timeout = config.section('runtime')['timeout_seconds']
+        self.request_timeout = config.section('runtime')['timeout_seconds']
+        self.source_deadline = None
         self.session = requests.Session()
         self.session.headers.update({'User-Agent': 'Mozilla/5.0'})
         self.browser = self.playwright = None
@@ -98,6 +99,35 @@ class SourceContext:
         self.lexin_results = {}
         self.lexin_audio_attempted = set()
 
+    def check_budget(self):
+        if self.source_deadline is not None and time.monotonic() >= self.source_deadline:
+            raise TimeoutError('Source time limit exceeded; moving to the next source')
+
+    @property
+    def timeout(self):
+        self.check_budget()
+        if self.source_deadline is None:
+            return self.request_timeout
+        return min(self.request_timeout, max(.001, self.source_deadline - time.monotonic()))
+
+    @contextmanager
+    def source_budget(self):
+        previous = self.source_deadline
+        seconds = self.config.section('runtime').get('source_timeout_seconds', 30)
+        self.source_deadline = time.monotonic() + seconds if seconds else None
+        try:
+            yield
+            self.check_budget()
+        finally:
+            self.source_deadline = previous
+
+    def pause(self, seconds):
+        self.check_budget()
+        if self.source_deadline is not None:
+            seconds = min(seconds, max(0, self.source_deadline - time.monotonic()))
+        time.sleep(seconds)
+        self.check_budget()
+
     def issue(self, word, source, message):
         if isinstance(message, requests.HTTPError) and message.response is not None:
             status = message.response.status_code
@@ -107,6 +137,7 @@ class SourceContext:
     def fetch(self, url):
         response = self.session.get(url, timeout=self.timeout)
         response.raise_for_status()
+        self.check_budget()
         return response
 
     @contextmanager
@@ -132,7 +163,7 @@ class SourceContext:
     def browse(self, url, selector):
         with self.page() as page:
             page.goto(url, wait_until='domcontentloaded', timeout=self.timeout * 1000)
-            page.locator(selector).first.wait_for()
+            page.locator(selector).first.wait_for(timeout=self.timeout * 1000)
             return BeautifulSoup(page.content(), 'html.parser')
 
     def save_audio(self, word, provider, data):
@@ -174,7 +205,8 @@ class SourceContext:
             content, sound = scrape_and_process_lexin(
                 word, number, page, download_audio=audio and not bool(cached),
                 audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout,
-                verbose=False, on_error=lambda source, error: self.issue(word, source, error))
+                verbose=False, on_error=lambda source, error: self.issue(word, source, error),
+                remaining_timeout=lambda: self.timeout)
         if sound:
             sound = self.register_audio(self.audio_dir / sound[7:-1])
         self.lexin_results[word] = (content, cached or sound)
@@ -224,7 +256,7 @@ def dictionary_content(name, word, number, ctx):
             except Exception:
                 if attempt + 1 == runtime['translation_attempts']:
                     raise
-                time.sleep(runtime['retry_delay_seconds'] * (attempt + 1))
+                ctx.pause(runtime['retry_delay_seconds'] * (attempt + 1))
     if name == 'dict_com':
         # This is the same bidirectional pair for both input languages. An unknown
         # English route can silently fall back to the site's German dictionary.

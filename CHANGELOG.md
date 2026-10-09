@@ -1,5 +1,12 @@
 # Release notes
 
+## v5.1.0 — 2026-10-09
+
+- Added an optional per-word/source network budget (`runtime.source_timeout_seconds`, default 30; 0 disables). Share remaining time across requests, browser waits and translation retry delays; hide expired source results and continue with other sources. Individual request timeout (`runtime.timeout_seconds`) also defaults to 30 seconds. Audio requests use the individual request timeout separately.
+- Wait for Ordbøkene hydration before toggling inflection, and use the remaining budget for table waits. Surface component warnings immediately even when source content succeeds.
+- Live `spise` and `hus` passed Lexin/Bokmålsordboka/Dict.com with a five-second budget; `spise` inflection completed in about 1.7 seconds.
+- Validation: 39 automated tests, configuration check and live budget/inflection checks. Anki schema and note identity are unchanged from v5.0.0. Time limits govern network operations; cleanup/local work may add time. Google rate limits and Faraazin DNS availability remain external limitations.
+
 ## v5.0.0 — 2026-10-09
 
 - Added separate Bokmålsordboka and Nynorskordboka sources, enabled for Norwegian input. Expand inflection tables for every exact entry; retain bold/italic emphasis, homograph entries, senses and set phrases. Tables scroll horizontally on narrow screens.

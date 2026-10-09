@@ -81,22 +81,26 @@ def save_lexin_audio(response, word, audio_directory=None, copy_to=None):
 
 def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
-                             verbose=True, on_error=None):
+                             verbose=True, on_error=None, remaining_timeout=None):
     """Return (full first exact entry HTML, sound tag); audio failure keeps the entry."""
     def log(message):
         if verbose:
             print(message)
+
+    def timeout_ms():
+        return (remaining_timeout() if remaining_timeout else timeout_seconds) * 1000
 
     log(f'[LEXIN] ({word_number}) {word}')
     entry_html = ''
     sound_tag = ''
     try:
         page.goto('https://lexin.oslomet.no/#/findwords/message.bokmal-english?q=' + quote(str(word), safe=''),
-                  wait_until='domcontentloaded', timeout=timeout_seconds * 1000)
-        page.locator('.search-table dd[data-type="LEM"][lang="nb"]').first.wait_for(timeout=timeout_seconds * 1000)
+                  wait_until='domcontentloaded', timeout=timeout_ms())
+        page.locator('.search-table dd[data-type="LEM"][lang="nb"]').first.wait_for(timeout=timeout_ms())
         entries = page.locator('ul.search-table')
         entry = None
         for index in range(entries.count()):
+            page.set_default_timeout(timeout_ms())
             candidate = entries.nth(index)
             lemmas = candidate.locator('dd[data-type="LEM"][lang="nb"]')
             if not lemmas.count():
@@ -123,8 +127,8 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
         try:
             # Leseweb generates a playlist, then an MP3 after the headword button is clicked.
             with page.expect_response(lambda r: '.mp3' in r.url.lower() and 'leseweb.dk/' in r.url,
-                                      timeout=timeout_seconds * 1000) as pending:
-                button.click(timeout=5000)
+                                      timeout=timeout_ms()) as pending:
+                button.click(timeout=min(5000, timeout_ms()))
             sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to)
         except Exception as exc:
             if on_error:

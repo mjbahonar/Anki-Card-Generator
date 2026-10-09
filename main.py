@@ -14,7 +14,7 @@ from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audi
 from lexin_scraper import normalize_headword
 from console_report import ConsoleReport, concise
 
-VERSION = '5.0.0'
+VERSION = '5.1.0'
 
 
 def read_words(config):
@@ -108,6 +108,8 @@ def run(config, context_factory=SourceContext):
     skipped = [name for name in requested if name not in active]
     print(f'Anki Card Generator V{VERSION} | {config.section("language")["source"]} | {len(words)} words', flush=True)
     print('Sources: ' + (', '.join(active) or 'none'), flush=True)
+    limit = config.section('runtime').get('source_timeout_seconds', 30)
+    print(f'Source time budget: {limit}s' if limit else 'Source time budget: disabled', flush=True)
     if skipped:
         print('Skipped sources incompatible with this language: ' + ', '.join(skipped), flush=True)
     stem = config.section('output')['filename_prefix'] + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')
@@ -133,7 +135,8 @@ def run(config, context_factory=SourceContext):
                     started = time.monotonic()
                     previous = len(context.errors)
                     try:
-                        row[name] = dictionary_content(name, word, number, context)
+                        with context.source_budget():
+                            row[name] = dictionary_content(name, word, number, context)
                         if not row[name]:
                             if len(context.errors) == previous:
                                 context.issue(word, name, 'No exact entry/content received')
@@ -143,6 +146,8 @@ def run(config, context_factory=SourceContext):
                                           context.errors[-1]['message'])
                         else:
                             report.source(name, 'OK', started)
+                            for issue in context.errors[previous:]:
+                                print(f'  WARN  {issue["source"]}: {concise(issue["message"])}', flush=True)
                     except Exception as exc:
                         context.issue(word, name, exc)
                         row[name] = ''

@@ -5,6 +5,8 @@ import time
 
 def concise(message):
     text = str(message).strip()
+    if 'Source time limit exceeded' in text:
+        return 'Source time limit exceeded; skipped'
     if 'ERR_NAME_NOT_RESOLVED' in text:
         return 'DNS lookup failed; source address unavailable'
     if 'Timeout' in text or 'timed out' in text:
