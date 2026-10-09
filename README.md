@@ -2,7 +2,18 @@
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
-One application for English, Norwegian and configurable translation languages. Edit **`config.toml`**, then run **`main.py`**. Every dictionary uses the current card style, including dark mode; the English About block is always last.
+Turn an Excel word list into styled Anki cards with definitions, examples, inflection tables and pronunciation. English and Norwegian share one application, one configuration file and one card style.
+
+**Edit `config.toml`. Run `python main.py`. Import the generated `.apkg` into Anki or AnkiDroid.**
+
+## What V4 includes
+
+- Dictionary selection and display order without editing Python or Anki templates.
+- Norwegian Lexin entries with inflections, plus English dictionary sources and configurable translation.
+- Headword pronunciation with provider priority, fallback and cached downloads.
+- Excel, CSV, Anki packages, playable HTML previews and JSON reports.
+- A shared card style with dark mode and an English About block at the bottom.
+- Source error handling, recovery saves and stable Anki note identities.
 
 ## Install and run
 
@@ -16,6 +27,8 @@ python main.py
 ```
 
 Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a new V4 deck, with Lexin first, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
+
+Generated files appear in `Output`. Start with `input.max_words = 3` for a small trial; set it to `0` to process the entire list.
 
 ## All user settings are in config.toml
 
@@ -36,6 +49,27 @@ Relative paths are resolved from the configuration file's directory, regardless 
 ### Switching to English
 
 In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the unified V4 `model_id` can stay the same.
+
+For example, change the existing settings to these values:
+
+```toml
+[language]
+source = "en"
+translation_target = "fa"
+
+[sources.fastdic]
+enabled = true
+examples_per_definition = 3
+
+[sources.faraazin]
+enabled = true
+
+[sources.cambridge]
+enabled = true
+examples_per_definition = 3
+```
+
+Edit the existing sections rather than adding duplicate TOML sections. Dictionary sources are opt-in: changing the language does not automatically enable every compatible provider.
 
 ### Dictionary catalog
 
@@ -58,6 +92,8 @@ Sources incompatible with the selected language are skipped. Availability depend
 
 Choose any subset of `xlsx`, `csv`, `apkg`, `html` and `json`. The HTML preview includes playable audio. JSON includes source errors; a separate `*_errors.json` is written when issues occur. Recovery CSV files save progress every `autosave_every` words; set it to `0` to disable. Ctrl+C saves partial results.
 
+For example, `formats = ["apkg", "html"]` creates just an Anki package and a preview. The input filename, sheet and word column are independent of the chosen output formats.
+
 Only the input headword's pronunciation is downloaded. Provider priority is independent of the visible dictionary list. Norwegian defaults to Lexin with Google TTS fallback; English can use Fastdic with a selected US/UK accent and Google TTS fallback. Cached audio is reused. Anki packages include only referenced media and the font, rather than the entire media directory. Lexin/Google audio is synthesized speech.
 
 ### Anki identity and previous versions
@@ -75,3 +111,15 @@ python -m unittest test_v4 test_lexin_scraper -v
 ```
 
 The old `main_script.py` and `main_script(word_by_word).py` filenames are small compatibility entry points that run the same V4 application and configuration.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| A dictionary is missing | Its `enabled` setting, language compatibility and the run's `*_errors.json` report |
+| Google translation is empty | HTTP 429 or another source error; wait before retrying or disable this source |
+| Browser unavailable | Run `python -m playwright install chromium` in the same Python environment |
+| Wrong words or input error | `input.file`, `sheet`, `header` and `word_column`; run `python main.py --check` |
+| A source stops returning content | The site's availability or changed markup; other sources can still complete |
+
+V4 live checks covered Lexin, Dict.com, Fastdic and Cambridge. Faraazin is available in the source catalog but was disabled in the published English test preview, so that preview does not establish whether Faraazin is currently working.
