@@ -1,10 +1,4 @@
-# Anki Card Generator — v5.0.0
-
-Norwegian sources now include `[sources.bokmalsordboka]` and `[sources.nynorskordboka]`, separately enabled by default. Both include exact headword articles, expanded inflection tables and original bold/italic emphasis. Nynorsk content uses Nynorsk spelling and may differ from a Bokmål input word; a missing exact entry is reported normally. Info remains last. V5 draft model `1559328450` must also be replaced by the final model `1559328451`.
-
-Oxford is enabled for English in `[sources.oxford]`; `examples_per_definition = 3` limits examples for each main definition. It follows exact same-word entry links to collect all available parts of speech, without including compounds. It uses direct HTML requests and downloads no Oxford audio. Fastdic/Google TTS remain the audio providers.
-
-**V5 migration:** adding Oxford changes the fixed Anki schema. Defaults now use model `1559328451` and deck `2059400451`. Import into this new deck; do not reuse a V4 model ID or expect automatic migration of review history. Existing V4 decks remain available. Keep the new IDs fixed after the first V5 import, regardless of source toggles.
+# Anki Card Generator
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
@@ -32,7 +26,7 @@ python main.py --check
 python main.py
 ```
 
-Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a new V5 deck, with Lexin first, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
+Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a deck with Lexin first, Bokmålsordboka, Nynorskordboka, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
 
 Generated files appear in `Output`. Start with `input.max_words = 3` for a small trial; set it to `0` to process the entire list.
 
@@ -54,7 +48,7 @@ Relative paths are resolved from the configuration file's directory, regardless 
 
 ### Switching to English
 
-In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the unified V5 `model_id` can stay the same.
+In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `oxford`, `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the shared `model_id` can stay the same.
 
 For example, change the existing settings to these values:
 
@@ -93,9 +87,11 @@ Edit the existing sections rather than adding duplicate TOML sections. Dictionar
 | `google_dictionary` | English | Google's dictionary result |
 | `images` | Configurable | Downloaded image results; `count` controls the limit |
 
-Fastdic and Cambridge keep their definitions and show up to `examples_per_definition` examples per definition (default: 3). Set it to 0 for definitions only. Site advertisements and navigation controls are excluded.
+Fastdic, Cambridge and Oxford keep their definitions and show up to `examples_per_definition` examples per definition (default: 3). Set it to 0 for definitions only. Site advertisements and navigation controls are excluded.
 
-Sources incompatible with the selected language are skipped. Availability depends on the websites; markup changes or service restrictions are recorded as source warnings. Google Translate can return HTTP 429; retries are bounded and its failure does not stop other sources. Legacy providers have adapters, but not every provider has been live-tested in V4; see the release notes.
+Sources incompatible with the selected language are skipped. Availability depends on the websites; markup changes or service restrictions are recorded as source warnings. Google Translate can return HTTP 429; retries are bounded and its failure does not stop other sources.
+
+Oxford collects all available parts of speech for the exact headword. Bokmålsordboka and Nynorskordboka include expanded inflection tables and preserve bold/italic emphasis. Nynorsk spelling may differ from Bokmål, so some input words may have no exact Nynorsk entry.
 
 ### Output and audio
 
@@ -105,10 +101,9 @@ For example, `formats = ["apkg", "html"]` creates just an Anki package and a pre
 
 Only the input headword's pronunciation is downloaded. Provider priority is independent of the visible dictionary list. Norwegian defaults to Lexin with Google TTS fallback; English can use Fastdic with a selected US/UK accent and Google TTS fallback. Cached audio is reused. Anki packages include only referenced media and the font, rather than the entire media directory. Lexin/Google audio is synthesized speech.
 
-### Anki identity and previous versions
+### Anki identity
 
-
-After the first V5 import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
+After the first import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
 
 ## Development
 
@@ -118,7 +113,7 @@ After the first V5 import, keep the deck/model IDs fixed. Disabling or reorderin
 python -m unittest test_v4 test_lexin_scraper -v
 ```
 
-`main.py` is the only application entry point. Obsolete V3 launchers, styles, screenshots and documentation have been removed. Only the English and Persian README files are maintained.
+`main.py` is the application entry point. Use `config.toml` for everyday settings.
 
 | File | Purpose |
 | --- | --- |
@@ -126,13 +121,14 @@ python -m unittest test_v4 test_lexin_scraper -v
 | `main.py` | The only file you run |
 | `app_config.py` | Configuration validation |
 | `sources.py` | Dictionary and audio adapters |
-| `lexin_scraper.py` | Lexin-specific extraction |
+| `lexin_scraper.py`, `oxford_scraper.py`, `ordbokene_scraper.py` | Dictionary-specific extraction |
+| `image_sources.py` | Google/Commons image downloading |
 | `anki_exporter.py` | Stable Anki model and package generation |
 | `console_report.py` | Console progress and final run summary |
 | `Styles/cards.css` | The shared card style |
 | `test_v4.py`, `test_lexin_scraper.py` | Automated tests |
 
-Release tags now follow `vMAJOR.MINOR.PATCH`, without language suffixes. Historical tags are preserved. See [the release policy](RELEASING.md).
+See [release notes](CHANGELOG.md) for version changes and migration details, and [the release policy](RELEASING.md) for publishing conventions.
 
 ## Troubleshooting
 
@@ -149,5 +145,3 @@ Each word shows `OK`, `EMPTY` or `FAIL` for each source, its elapsed time and au
 | Browser unavailable | Run `python -m playwright install chromium` in the same Python environment |
 | Wrong words or input error | `input.file`, `sheet`, `header` and `word_column`; run `python main.py --check` |
 | A source stops returning content | The site's availability or changed markup; other sources can still complete |
-
-V4 live checks covered Lexin, Dict.com, Fastdic and Cambridge. Faraazin was also enabled in a later three-word test, but both its `www` and bare hostnames failed DNS resolution in the test environment. This does not establish geographic blocking. Try another network or DNS resolver before attributing the issue to location; no Faraazin content was retrieved.
