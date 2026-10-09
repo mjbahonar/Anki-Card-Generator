@@ -8,6 +8,8 @@ import tomllib
 import unittest
 from unittest.mock import Mock, patch
 import zipfile
+import io
+from contextlib import redirect_stdout
 from bs4 import BeautifulSoup
 
 import pandas as pd
@@ -16,11 +18,109 @@ from anki_exporter import FIELDS, answer_template, display_sources, generate_ank
 from app_config import Config, ConfigError, load_config
 from main import export_outputs, read_words, run
 from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
+from sources import clean_html, block
 
 ROOT = Path(__file__).resolve().parent
 
 
 class V4Tests(unittest.TestCase):
+    def test_browser_launch_uses_configured_timeout(self):
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        with patch('playwright.sync_api.sync_playwright') as start:
+            engine = start.return_value.start.return_value
+            with context.page():
+                pass
+            self.assertEqual(engine.chromium.launch.call_args.kwargs['timeout'], context.timeout * 1000)
+
+    def test_lexin_search_errors_are_reported_without_console_traceback(self):
+        from lexin_scraper import scrape_and_process_lexin
+        page = Mock()
+        page.goto.side_effect = RuntimeError('search failed\nlong traceback')
+        callback, output = Mock(), io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(scrape_and_process_lexin('bok', 1, page, verbose=False, on_error=callback), ('', ''))
+        callback.assert_called_once()
+        self.assertEqual(callback.call_args.args[0], 'lexin')
+        self.assertEqual(output.getvalue(), '')
+
+    def test_config_rejects_nonfinite_numbers_and_oversized_ids(self):
+        text = (ROOT / 'config.toml').read_text(encoding='utf-8')
+        path = self.directory / 'invalid.toml'
+        for old, new, message in [('timeout_seconds = 20', 'timeout_seconds = nan', 'timeout_seconds'),
+                                  ('word_delay_seconds = 0.5', 'word_delay_seconds = inf', 'word_delay_seconds'),
+                                  ('deck_id = 2059400440', 'deck_id = 9223372036854775808', 'SQLite')]:
+            with self.subTest(message=message):
+                path.write_text(text.replace(old, new), encoding='utf-8')
+                with self.assertRaisesRegex(ConfigError, message):
+                    load_config(path)
+
+    def test_runtime_failure_saves_partial_words(self):
+        self.config.section('output')['formats'] = ['json']
+        with patch('main.dictionary_content', return_value='<p>definition</p>'), \
+             patch('main.select_audio', return_value=''), patch('main.time.sleep', side_effect=RuntimeError('runtime failure')), \
+             redirect_stdout(io.StringIO()):
+            self.assertEqual(run(self.config), 1)
+        saved = next(self.directory.glob('*_partial.json'))
+        self.assertEqual(len(json.loads(saved.read_text(encoding='utf-8'))['words']), 1)
+
+    def test_html_preserves_example_direction_and_rejects_empty_content(self):
+        self.assertIn('dir="ltr"', clean_html('<div dir="ltr" onclick="bad()">example</div>'))
+        self.assertNotIn('onclick', clean_html('<div onclick="bad()">example</div>'))
+        with self.assertRaises(ValueError):
+            block('fastdic', '<script>not a definition</script>')
+
+    def test_browser_setup_failure_closes_page_and_session_cleanup_survives(self):
+        context = SourceContext(self.config)
+        context.browser = Mock()
+        page = context.browser.new_page.return_value
+        page.set_default_timeout.side_effect = RuntimeError('setup')
+        with self.assertRaises(RuntimeError), context.page():
+            self.fail('Page should not be yielded')
+        page.close.assert_called_once()
+        context.playwright = Mock()
+        context.playwright.stop.side_effect = RuntimeError('stop')
+        context.session.close = Mock()
+        with self.assertRaises(RuntimeError):
+            context.close()
+        context.session.close.assert_called_once()
+
+    def test_unexpected_audio_error_keeps_words_and_prints_final_report(self):
+        self.config.section('output')['formats'] = ['json']
+        output = io.StringIO()
+        with patch('main.dictionary_content', return_value='<p>definition</p>'), \
+             patch('main.select_audio', side_effect=RuntimeError('unexpected audio failure')), redirect_stdout(output):
+            self.assertEqual(run(self.config), 0)
+        text = output.getvalue()
+        self.assertIn('FINAL REPORT', text)
+        self.assertIn('Words saved: 2/2', text)
+        self.assertIn('COMPLETED WITH WARNINGS', text)
+        saved = next(path for path in self.directory.glob('*.json') if not path.name.endswith('_errors.json'))
+        self.assertEqual(len(json.loads(saved.read_text(encoding='utf-8'))['words']), 2)
+
+    def test_report_write_failure_does_not_discard_export(self):
+        self.config.section('output')['formats'] = ['csv']
+        original = Path.write_text
+        def write(path, *args, **kwargs):
+            if path.name.endswith('_errors.json'):
+                raise PermissionError('report locked')
+            return original(path, *args, **kwargs)
+        with patch('main.dictionary_content', side_effect=RuntimeError('offline')), \
+             patch('main.select_audio', return_value=''), patch.object(Path, 'write_text', write), redirect_stdout(io.StringIO()):
+            self.assertEqual(run(self.config), 1)
+        self.assertTrue(list(self.directory.glob('*.csv')))
+
+    def test_unwritable_output_returns_export_failures(self):
+        blocked = self.directory / 'blocked'
+        blocked.write_text('file', encoding='utf-8')
+        self.config.section('output')['directory'] = str(blocked)
+        self.config.section('output')['formats'] = ['csv', 'json']
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        paths, failures = export_outputs([{'Words': 'bok'}], self.config, 'test', context)
+        self.assertEqual(paths, [])
+        self.assertEqual(len(failures), 2)
+
     def setUp(self):
         (ROOT / 'Output').mkdir(exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=ROOT / 'Output')

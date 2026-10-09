@@ -1,4 +1,4 @@
-# Anki Card Generator — v4.0.1
+# Anki Card Generator — v4.0.2
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
@@ -120,12 +120,17 @@ python -m unittest test_v4 test_lexin_scraper -v
 | `sources.py` | Dictionary and audio adapters |
 | `lexin_scraper.py` | Lexin-specific extraction |
 | `anki_exporter.py` | Stable Anki model and package generation |
+| `console_report.py` | Console progress and final run summary |
 | `Styles/cards.css` | The shared card style |
 | `test_v4.py`, `test_lexin_scraper.py` | Automated tests |
 
 Release tags now follow `vMAJOR.MINOR.PATCH`, without language suffixes. Historical tags are preserved. See [the release policy](RELEASING.md).
 
 ## Troubleshooting
+
+Dict.com currently uses the English–Norwegian pair: English input returns Norwegian meanings, not Persian. Disable it for an English–Persian deck; use Fastdic for Persian meanings and Cambridge for English definitions.
+
+Each word shows `OK`, `EMPTY` or `FAIL` for each source, its elapsed time and audio status. The final console report lists per-source totals, words saved, audio coverage, issues and output paths. Failed sources remain empty and are hidden on cards; available sources are still exported. Detailed errors are saved in `*_errors.json`. Interrupted or unexpectedly stopped runs save available rows with a `_partial` suffix. Export/report failures return exit code 1; interruption returns 2; completed runs (including source warnings) return 0.
 
 | Symptom | What to check |
 | --- | --- |

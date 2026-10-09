@@ -1,5 +1,14 @@
 # Release notes
 
+## v4.0.2 — 2026-10-09
+
+- Added readable per-word source statuses, elapsed times, audio status and a final console report with source totals, issues and output paths.
+- Preserved available rows after unexpected runtime/audio errors and reported output-directory, autosave and error-report write failures without discarding successful exports.
+- Captured Lexin search/audio errors in the structured report, bounded Chromium launch timeout, and fixed browser/session cleanup after setup failures.
+- Preserved Fastdic example direction, rejected empty sanitized definitions, validated finite timing values and SQLite-compatible Anki IDs, and created optional audio-copy directories.
+- Validation: 30 automated tests, configuration validation and live checks of six words. Norwegian Lexin/Dict.com and English Fastdic/Cambridge/Dict.com returned content; all five output formats completed, both Anki databases passed integrity checks and all six freshly downloaded MP3s were bundled.
+- Known limitations: Google Translate returned HTTP 429; Faraazin failed DNS resolution. Dict.com uses the English–Norwegian pair even for English input; it does not provide English–Persian translations. No Oxford/Merriam-Webster adapter is included in this release.
+
 ## v4.0.1 — 2026-10-09
 
 - Removed obsolete launchers (`main_script.py` and `main_script(word_by_word).py`), unused V3 styles and screenshots, and archived/extra-language README files. Keep `main.py` as the single entry point and English/Persian as the maintained README languages.

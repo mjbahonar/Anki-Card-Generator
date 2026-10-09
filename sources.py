@@ -55,7 +55,9 @@ def clean_html(markup):
         if tag.name not in allowed:
             tag.unwrap()
             continue
-        tag.attrs = {k: v for k, v in tag.attrs.items() if k in {'class', 'lang', 'colspan', 'rowspan', 'src', 'alt'}}
+        tag.attrs = {k: v for k, v in tag.attrs.items() if k in {'class', 'lang', 'colspan', 'rowspan', 'src', 'alt', 'dir'}}
+        if tag.get('dir') not in ('ltr', 'rtl', 'auto'):
+            tag.attrs.pop('dir', None)
         if tag.name == 'img':
             src = tag.get('src', '')
             if not src or '/' in src or '\\' in src or ':' in src:
@@ -64,10 +66,14 @@ def clean_html(markup):
 
 
 def block(name, content, rtl=None):
+    content = clean_html(content)
+    parsed = BeautifulSoup(content, 'html.parser')
+    if not parsed.get_text(strip=True) and not parsed.find('img'):
+        raise ValueError('No usable dictionary content received')
     direction = SOURCE_SPECS[name].rtl if rtl is None else rtl
     return (f'<div class="gt-container source-container" dir="{"rtl" if direction else "ltr"}">'
             f'<div class="gt-title">{html.escape(SOURCE_SPECS[name].title)}</div>'
-            f'<hr class="gt-separator"><div class="source-content">{clean_html(content)}</div></div>')
+            f'<hr class="gt-separator"><div class="source-content">{content}</div></div>')
 
 
 class SourceContext:
@@ -91,7 +97,6 @@ class SourceContext:
             status = message.response.status_code
             message = f'HTTP {status}' + (' (rate limited; try again later)' if status == 429 else ' (source unavailable)')
         self.errors.append({'word': word, 'source': source, 'message': str(message)})
-        print(f'  [{source}] {word}: {message}', flush=True)
 
     def fetch(self, url):
         response = self.session.get(url, timeout=self.timeout)
@@ -106,13 +111,14 @@ class SourceContext:
             try:
                 from playwright.sync_api import sync_playwright
                 self.playwright = sync_playwright().start()
-                self.browser = self.playwright.chromium.launch(headless=self.config.section('runtime')['headless'])
+                self.browser = self.playwright.chromium.launch(
+                    headless=self.config.section('runtime')['headless'], timeout=self.timeout * 1000)
             except Exception as exc:
                 self.browser_error = f'Browser unavailable; run python -m playwright install chromium. {exc}'
                 raise RuntimeError(self.browser_error) from exc
         page = self.browser.new_page()
-        page.set_default_timeout(self.timeout * 1000)
         try:
+            page.set_default_timeout(self.timeout * 1000)
             yield page
         finally:
             page.close()
@@ -139,6 +145,7 @@ class SourceContext:
             try:
                 target = self.config.resolve(destination) / path.name
                 if target.resolve() != path.resolve():
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(path, target)
             except OSError as exc:
                 self.issue(path.name, 'audio_copy', exc)
@@ -160,7 +167,8 @@ class SourceContext:
         with self.page() as page:
             content, sound = scrape_and_process_lexin(
                 word, number, page, download_audio=audio and not bool(cached),
-                audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout)
+                audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout,
+                verbose=False, on_error=lambda source, error: self.issue(word, source, error))
         if sound:
             sound = self.register_audio(self.audio_dir / sound[7:-1])
         self.lexin_results[word] = (content, cached or sound)
@@ -171,9 +179,11 @@ class SourceContext:
             if self.browser:
                 self.browser.close()
         finally:
-            if self.playwright:
-                self.playwright.stop()
-            self.session.close()
+            try:
+                if self.playwright:
+                    self.playwright.stop()
+            finally:
+                self.session.close()
 
 
 def dictionary_content(name, word, number, ctx):

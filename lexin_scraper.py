@@ -80,9 +80,14 @@ def save_lexin_audio(response, word, audio_directory=None, copy_to=None):
 
 
 def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
-                             audio_directory=None, copy_to=None, timeout_seconds=20):
+                             audio_directory=None, copy_to=None, timeout_seconds=20,
+                             verbose=True, on_error=None):
     """Return (full first exact entry HTML, sound tag); audio failure keeps the entry."""
-    print(f'[LEXIN] ({word_number}) {word}')
+    def log(message):
+        if verbose:
+            print(message)
+
+    log(f'[LEXIN] ({word_number}) {word}')
     entry_html = ''
     sound_tag = ''
     try:
@@ -103,7 +108,7 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                 entry = candidate
                 break
         if entry is None:
-            print(f'[LEXIN] No exact headword for {word!r}')
+            log(f'[LEXIN] No exact headword for {word!r}')
             return '', ''
         entry_html = render_lexin_entry(entry.inner_html())
         if not download_audio:
@@ -122,7 +127,11 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                 button.click(timeout=5000)
             sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to)
         except Exception as exc:
-            print(f'[LEXIN] Pronunciation unavailable; using Google TTS: {exc}')
+            if on_error:
+                on_error('lexin_audio', exc)
+            log(f'[LEXIN] Pronunciation unavailable: {exc}')
     except Exception as exc:
-        print(f'[LEXIN] Search failed for {word!r}: {exc}')
+        if on_error:
+            on_error('lexin', exc)
+        log(f'[LEXIN] Search failed for {word!r}: {exc}')
     return entry_html, sound_tag

@@ -12,8 +12,9 @@ from anki_exporter import display_sources, generate_anki_package, info_html, row
 from app_config import ConfigError, load_config
 from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
 from lexin_scraper import normalize_headword
+from console_report import ConsoleReport, concise
 
-VERSION = '4.0.1'
+VERSION = '4.0.2'
 
 
 def read_words(config):
@@ -67,7 +68,6 @@ def html_preview(rows, config):
 def export_outputs(rows, config, stem, context, recovery=False):
     import pandas as pd
     output = config.resolve(config.section('output')['directory'])
-    output.mkdir(parents=True, exist_ok=True)
     columns = ['Words', 'FrontField', 'Sound', *display_sources(config), 'Info']
     frame = pd.DataFrame(rows).reindex(columns=columns, fill_value='')
     formats = ['csv'] if recovery else list(dict.fromkeys(config.section('output')['formats']))
@@ -75,6 +75,7 @@ def export_outputs(rows, config, stem, context, recovery=False):
     for format_name in formats:
         path, temporary = output / f'{stem}.{format_name}', output / f'{stem}.tmp.{format_name}'
         try:
+            output.mkdir(parents=True, exist_ok=True)
             if format_name == 'csv':
                 frame.to_csv(temporary, index=False, encoding='utf-8-sig')
             elif format_name == 'xlsx':
@@ -91,7 +92,7 @@ def export_outputs(rows, config, stem, context, recovery=False):
             paths.append(path)
         except Exception as exc:
             failures.append(f'{format_name}: {exc}')
-            print(f'Export failed ({format_name}): {exc}', flush=True)
+            print(f'  FAIL export {format_name}: {concise(exc)}', flush=True)
         finally:
             if temporary.exists():
                 try:
@@ -111,6 +112,8 @@ def run(config, context_factory=SourceContext):
         print('Skipped sources incompatible with this language: ' + ', '.join(skipped), flush=True)
     stem = config.section('output')['filename_prefix'] + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')
     rows, context = [], context_factory(config)
+    report = ConsoleReport(active, len(words))
+    recovery_failures = []
     keep_awake = nullcontext()
     if config.section('runtime')['keep_awake']:
         try:
@@ -119,49 +122,77 @@ def run(config, context_factory=SourceContext):
         except Exception as exc:
             print(f'Keep-awake unavailable: {exc}', flush=True)
     interrupted = False
+    fatal = False
     try:
         with keep_awake:
             for number, word in enumerate(words, 1):
-                print(f'[{number}/{len(words)}] {word}', flush=True)
+                print(f'\n[{number}/{len(words)}] {word}', flush=True)
                 row = {'Words': word, **{name: '' for name in SOURCE_SPECS}, 'Info': info_html(config)}
                 rows.append(row)
                 for name in active:
+                    started = time.monotonic()
+                    previous = len(context.errors)
                     try:
                         row[name] = dictionary_content(name, word, number, context)
                         if not row[name]:
-                            context.issue(word, name, 'No exact entry/content received')
+                            if len(context.errors) == previous:
+                                context.issue(word, name, 'No exact entry/content received')
+                            failed = any(error['source'] == name for error in context.errors[previous:]
+                                         if error['message'] != 'No exact entry/content received')
+                            report.source(name, 'FAIL' if failed else 'EMPTY', started,
+                                          context.errors[-1]['message'])
+                        else:
+                            report.source(name, 'OK', started)
                     except Exception as exc:
                         context.issue(word, name, exc)
-                row['Sound'] = select_audio(word, number, context)
+                        row[name] = ''
+                        report.source(name, 'FAIL', started, context.errors[-1]['message'])
+                previous = len(context.errors)
+                try:
+                    row['Sound'] = select_audio(word, number, context)
+                except Exception as exc:
+                    context.issue(word, 'audio', exc)
+                    row['Sound'] = ''
+                print('  AUDIO ' + (row['Sound'][7:-1] if row['Sound'] else
+                      'unavailable' if config.section('audio')['enabled'] else 'disabled'), flush=True)
+                for error in context.errors[previous:]:
+                    print(f'  WARN  {error["source"]}: {concise(error["message"])}', flush=True)
                 row['FrontField'] = html.escape(word) + (' ' + row['Sound'] if row['Sound'] else '')
                 every = config.section('output')['autosave_every']
                 if every and number % every == 0:
-                    export_outputs(rows, config, stem + '_recovery', context, recovery=True)
+                    _, autosave_failures = export_outputs(rows, config, stem + '_recovery', context, recovery=True)
+                    recovery_failures.extend(autosave_failures)
                 if number < len(words):
                     time.sleep(config.section('runtime')['word_delay_seconds'])
     except KeyboardInterrupt:
         interrupted = True
         print('Interrupted; saving completed and partial words.', flush=True)
+    except Exception as exc:
+        fatal = True
+        context.issue('', 'runtime', exc)
+        print('Run stopped; saving available words: ' + concise(exc), flush=True)
     finally:
         try:
             context.close()
         except Exception as exc:
-            print(f'Browser cleanup: {exc}', flush=True)
+            context.issue('', 'cleanup', exc)
     for row in rows:
         row.setdefault('Sound', '')
         row.setdefault('FrontField', html.escape(row['Words']))
     if not rows:
+        report.finish(rows, context.errors, [], ['No words saved'], partial=interrupted or fatal)
         return 2 if interrupted else 1
-    paths, failures = export_outputs(rows, config, stem + ('_partial' if interrupted else ''), context)
+    paths, failures = export_outputs(rows, config, stem + ('_partial' if interrupted or fatal else ''), context)
+    failures.extend(recovery_failures)
     if context.errors:
         error_path = config.resolve(config.section('output')['directory']) / f'{stem}_errors.json'
-        error_path.write_text(json.dumps(context.errors, ensure_ascii=False, indent=2), encoding='utf-8')
-        print(f'{len(context.errors)} source/audio issue(s); details: {error_path}', flush=True)
-    for path in paths:
-        print(f'Saved: {path}', flush=True)
-    if not failures and not interrupted:
-        print('Finished.' if not context.errors else 'Finished with source warnings; available results were saved.', flush=True)
-    return 2 if interrupted else (1 if failures else 0)
+        try:
+            error_path.write_text(json.dumps(context.errors, ensure_ascii=False, indent=2), encoding='utf-8')
+            paths.append(error_path)
+        except Exception as exc:
+            failures.append('Error report: ' + str(exc))
+    report.finish(rows, context.errors, paths, failures, partial=interrupted or fatal)
+    return 2 if interrupted else (1 if failures or fatal else 0)
 
 
 def main(argv=None):

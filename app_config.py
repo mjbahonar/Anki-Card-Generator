@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import math
 import tomllib
 
 
@@ -75,9 +76,11 @@ def load_config(path):
         value = data[section][key]
         if type(value) is not int or value < minimum:
             raise ConfigError(f'{section}.{key} must be an integer >= {minimum}')
+        if section == 'anki' and value > 2**63 - 1:
+            raise ConfigError(f'anki.{key} exceeds the supported SQLite integer range')
     for key in ['timeout_seconds', 'retry_delay_seconds', 'word_delay_seconds']:
         value = data['runtime'][key]
-        if type(value) not in (int, float) or value < (1 if key == 'timeout_seconds' else 0):
+        if type(value) not in (int, float) or not math.isfinite(value) or value < (1 if key == 'timeout_seconds' else 0):
             raise ConfigError(f'runtime.{key} must be a valid non-negative number (timeout >= 1)')
     for key in ['sheet', 'word_column']:
         value = data['input'][key]
