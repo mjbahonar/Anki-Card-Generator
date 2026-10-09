@@ -1,5 +1,7 @@
 # Documentation: Automatic Anki Card Generator
 
+> This is the archived V3 technical guide. For the unified V4 application and its single configuration file, use the [current README](../README.md) or [Persian guide](../README_fa.md). The V3 code-editing and Selenium instructions below do not apply to V4.
+
 # How to use **Automatic Anki Card Generator**
 
 This documentation provides a technical guide for the **Automatic Anki Card Generator**, detailing its structure, configuration, and customization options.

@@ -16,3 +16,6 @@
 /Images
 /Output
 /venv
+
+__pycache__/
+*.py[cod]

@@ -1,0 +1,92 @@
+# Version 4: edit this file, then run: python main.py
+# All relative paths are resolved from this file's directory.
+
+[language]
+source = "no"                  # no = Norwegian, en = English
+translation_target = "fa"      # fa = Persian, en = English, etc.
+
+[input]
+file = "New Words.xlsx"
+sheet = 0                     # First sheet, or its name: "Sheet1"
+header = false                # true if the first row contains column names
+word_column = 0               # Zero-based column index, or a header name
+deduplicate = true
+max_words = 0                 # 0 = all words; use 3 for a small trial
+
+[output]
+directory = "Output"
+formats = ["xlsx", "csv", "apkg", "html", "json"]
+filename_prefix = "words"
+autosave_every = 5             # Recovery CSV; 0 disables autosave
+
+[anki]
+deck_name = "My Vocabulary"
+deck_id = 2059400440           # New V4 deck; keep fixed after the first import
+model_id = 1559328440          # V4 unified model; do not reuse a V3 model ID
+# Give a separate deck a separate deck_id. English and Norwegian share V4's model.
+
+[style]
+file = "Styles/cards.css"      # Current V3.6N look, shared by every language
+
+[audio]
+enabled = true
+priority = ["lexin", "fastdic", "google_tts"]
+directory = "Audio"
+copy_to = ""                  # Optional absolute Anki collection.media path
+cache = true
+english_accent = "us"         # us or uk (Fastdic)
+# Only the input headword's sound is downloaded, not inflection/example audio.
+
+[runtime]
+timeout_seconds = 20
+translation_attempts = 2
+retry_delay_seconds = 4
+word_delay_seconds = 0.5
+keep_awake = true
+headless = true
+
+[info]
+enabled = true
+title = "About this deck"
+text = "Created with Anki Card Generator. Build your own vocabulary deck from a simple word list."
+link_text = "Create your own deck"
+url = "https://github.com/mjbahonar/Anki-Card-Generator"
+
+# Sources are displayed in this order. Reorder these sections to change the cards.
+# Set enabled = false to hide a source. Fields in Anki stay stable automatically.
+# Sources that do not support the chosen language are skipped automatically.
+[sources.lexin]
+enabled = true                # Norwegian -> English; includes inflection tables
+
+[sources.google_translate]
+enabled = true                # Uses language.source and translation_target
+
+[sources.dict_com]
+enabled = true                # Norwegian <-> English
+
+[sources.fastdic]
+enabled = false               # English -> Persian
+examples_per_definition = 3
+
+[sources.faraazin]
+enabled = false               # English -> Persian
+
+[sources.b_amooz]
+enabled = false               # English -> Persian
+
+[sources.dictionary_com]
+enabled = false               # English definitions
+
+[sources.thesaurus]
+enabled = false               # English synonyms/antonyms
+
+[sources.google_dictionary]
+enabled = false               # English; Google's dictionary result
+
+[sources.cambridge]
+enabled = false               # English definitions
+examples_per_definition = 3
+
+[sources.images]
+enabled = false               # Google image results
+count = 3

@@ -16,10 +16,10 @@ def normalize_headword(text):
     return " ".join(unicodedata.normalize("NFC", text).replace("|", "").split()).casefold()
 
 
-def audio_filename(word, provider):
+def audio_filename(word, provider, language='no'):
     stem = re.sub(r'[^\w-]', '_', str(word), flags=re.UNICODE).strip('_')[:80] or 'word'
     digest = hashlib.sha256(str(word).encode('utf-8')).hexdigest()[:10]
-    return f"{provider}_no_{stem}_{digest}.mp3"
+    return f"{provider}_{language}_{stem}_{digest}.mp3"
 
 
 def render_lexin_entry(entry_html):
@@ -55,7 +55,7 @@ def choose_norwegian_audio(word, word_number, lexin_sound, google_tts):
     return ''
 
 
-def save_lexin_audio(response, word):
+def save_lexin_audio(response, word, audio_directory=None, copy_to=None):
     if not response.ok:
         raise ValueError(f'Pronunciation HTTP {response.status}')
     data = response.body()
@@ -63,12 +63,12 @@ def save_lexin_audio(response, word):
                              (data[0] == 0xff and data[1] & 0xe0 == 0xe0)):
         raise ValueError('Pronunciation response is not an MP3')
     filename = audio_filename(word, 'lexin')
-    audio_dir = Path(__file__).resolve().parent / 'Audio'
-    audio_dir.mkdir(exist_ok=True)
+    audio_dir = Path(audio_directory) if audio_directory else Path(__file__).resolve().parent / 'Audio'
+    audio_dir.mkdir(parents=True, exist_ok=True)
     local_path = audio_dir / filename
     local_path.write_bytes(data)
     load_dotenv()
-    media_dir = os.getenv('ADDRESS')
+    media_dir = os.getenv('ADDRESS') if copy_to is None else copy_to
     if media_dir:
         try:
             destination = Path(media_dir) / filename
@@ -79,15 +79,16 @@ def save_lexin_audio(response, word):
     return f'[sound:{filename}]'
 
 
-def scrape_and_process_lexin(word, word_number, page):
+def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
+                             audio_directory=None, copy_to=None, timeout_seconds=20):
     """Return (full first exact entry HTML, sound tag); audio failure keeps the entry."""
     print(f'[LEXIN] ({word_number}) {word}')
     entry_html = ''
     sound_tag = ''
     try:
         page.goto('https://lexin.oslomet.no/#/findwords/message.bokmal-english?q=' + quote(str(word), safe=''),
-                  wait_until='domcontentloaded', timeout=60000)
-        page.locator('.search-table dd[data-type="LEM"][lang="nb"]').first.wait_for(timeout=30000)
+                  wait_until='domcontentloaded', timeout=timeout_seconds * 1000)
+        page.locator('.search-table dd[data-type="LEM"][lang="nb"]').first.wait_for(timeout=timeout_seconds * 1000)
         entries = page.locator('ul.search-table')
         entry = None
         for index in range(entries.count()):
@@ -105,6 +106,8 @@ def scrape_and_process_lexin(word, word_number, page):
             print(f'[LEXIN] No exact headword for {word!r}')
             return '', ''
         entry_html = render_lexin_entry(entry.inner_html())
+        if not download_audio:
+            return entry_html, ''
         lemma = entry.locator('dd[data-type="LEM"][lang="nb"]').first
         forms = lemma.locator('.grunnform')
         button = lemma.locator('.tts-btn').first
@@ -115,9 +118,9 @@ def scrape_and_process_lexin(word, word_number, page):
         try:
             # Leseweb generates a playlist, then an MP3 after the headword button is clicked.
             with page.expect_response(lambda r: '.mp3' in r.url.lower() and 'leseweb.dk/' in r.url,
-                                      timeout=20000) as pending:
+                                      timeout=timeout_seconds * 1000) as pending:
                 button.click(timeout=5000)
-            sound_tag = save_lexin_audio(pending.value, word)
+            sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to)
         except Exception as exc:
             print(f'[LEXIN] Pronunciation unavailable; using Google TTS: {exc}')
     except Exception as exc:

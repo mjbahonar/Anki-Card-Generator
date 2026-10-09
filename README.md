@@ -1,50 +1,77 @@
-🌏 Read me in [Farsi](README_fa.md)
+# Anki Card Generator — V4.0
 
-# Automatic Anki Card Generator: The Automated Vocabulary Card Architect
+[راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
-### Norwegian edition — V3.6N
+One application for English, Norwegian and configurable translation languages. Edit **`config.toml`**, then run **`main.py`**. Every dictionary uses the current card style, including dark mode; the English About block is always last.
 
-The `Norwegian-to-English` branch generates Norwegian cards with Lexin first, Google Translate (Norwegian → Persian) second, and Dict.com third. Lexin retains the first exact Bokmål headword, its definitions, inflection tables, examples, idioms and compounds. The front uses Lexin's synthesized headword pronunciation, with Google TTS as a fallback. Inflection and compound audio is not downloaded.
+## Install and run
 
-Run `main_script(word_by_word).py` with a headerless `New Words.xlsx`. Results are saved in `Output` as Excel, CSV and an Anki package with bundled audio. Lexin and Dict.com use Playwright to load their JavaScript content. Install the dependencies in `requirements.txt` and the Playwright Chromium browser (`python -m playwright install chromium`).
+Requires Python **3.11+**. No Selenium, ChromeDriver or `.env` configuration is needed.
 
-See [V3.6N release notes](CHANGELOG.md) for changes, validation and known limitations. The English features described below refer to the earlier English edition.
+```powershell
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+python main.py --check
+python main.py
+```
 
-![](Docs/English.png)
+Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a new V4 deck, with Lexin first, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
 
-Meaning-Ankidroid is a professional-grade Python utility designed to transform a simple list of words into rich, multimedia-enhanced flashcards. Automating data collection from 7 premium dictionaries and high-quality media sources allows language learners to focus on memorization rather than card creation.
+## All user settings are in config.toml
 
-### Usage
+| Section | Settings |
+| --- | --- |
+| `language` | Input language (`no` or `en`, etc.) and translation target (`fa`, etc.) |
+| `input` | Excel file, sheet name/index, header, column name/index, duplicate removal and word limit |
+| `sources.*` | Enable/disable each dictionary; section order controls display order |
+| `audio` | Enable audio, provider priority, US/UK accent, media directory, caching and optional copy to Anki media |
+| `output` | Directory, filename prefix, selected formats and recovery autosave interval |
+| `anki` | Deck name, deck ID and model ID |
+| `style` | Shared CSS file (`Styles/cards.css`) |
+| `runtime` | Network timeout, translation retry policy, delay, headless browser and keep-awake |
+| `info` | English footer text and link, or disable it |
 
-Getting started is streamlined to ensure you spend less time on configuration and more time on learning:
+Relative paths are resolved from the configuration file's directory, regardless of the working directory. Sheet/column indices start at **0**. A column name requires `header = true`.
 
-1.  **Prepare Your Input**: Create an Excel file and list your target words in the first column (Column A) without a header row.
-2.  **Customize Your Experience**: 
-    *   **Translation Language**: Open the configuration to set your target language for Google Translate (e.g., Spanish, French, Persian, etc.).
-    *   **Dictionary Selection**: Choose which of the 7 available dictionaries you wish to use for your card data.
-3.  **Execute the Script**: Run `main_script(word_by_word).py` via your terminal. The system uses word-by-word logic to ensure definitions, examples, and media are gathered efficiently.
-4.  **Instant Import via .apkg**: In addition to .csv and .xlsx files, the script generates an **.apkg** file. This allows for a one-click import into Anki on Windows or AnkiDroid on Android, with all styles, images, and audio recordings preserved.
+### Switching to English
 
-### Key Features
+In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the unified V4 `model_id` can stay the same.
 
-*   **Seven Premium Dictionaries**: The tool aggregates data from seven distinct sources, including Fastdic, Faraazin, Google Dictionary, Cambridge Dictionary, and Dictionary.com, to provide the most comprehensive definitions.
-*   **Dual-Accent Pronunciation**: The system retrieves high-quality audio recordings in both **US and UK accents** for every word.
-*   **Automated Visual Learning**: It automatically fetches relevant clipart images for each word to improve long-term retention.
-*   **Global Translation Support**: Integrated with Google Translate to support translations into any target language.
-*   **Robust Processing**: Features an integrated autosave and multi-threading capability to prevent data loss and increase processing speed for large word lists.
+### Dictionary catalog
 
-### System Architecture
+| Source | Supported input | Content |
+| --- | --- | --- |
+| `lexin` | Norwegian | First exact Bokmål headword: explanations, inflections, examples, idioms and compounds |
+| `google_translate` | Configurable | Translation to `language.translation_target` |
+| `dict_com` | Norwegian / English | Translations and phrases in the other language |
+| `fastdic`, `faraazin`, `b_amooz` | English | Persian meanings |
+| `dictionary_com`, `cambridge` | English | English definitions |
+| `thesaurus` | English | Synonyms / antonyms |
+| `google_dictionary` | English | Google's dictionary result |
+| `images` | Configurable | Downloaded image results; `count` controls the limit |
 
-*   **main_script(word_by_word).py**: Manages core logic, batch processing, and parallel execution.
-*   **scraper_functions.py**: A specialized library for site-specific scraping and media downloads.
-*   **anki_exporter.py**: Handles the formatting of gathered data into Anki-ready files and .apkg packages.
+Fastdic and Cambridge keep their definitions and show up to `examples_per_definition` examples per definition (default: 3). Set it to 0 for definitions only. Site advertisements and navigation controls are excluded.
 
-### Prerequisites
+Sources incompatible with the selected language are skipped. Availability depends on the websites; markup changes or service restrictions are recorded as source warnings. Google Translate can return HTTP 429; retries are bounded and its failure does not stop other sources. Legacy providers have adapters, but not every provider has been live-tested in V4; see the release notes.
 
-*   Python 3.x
-*   Google Chrome and matching ChromeDriver.
-*   Required Libraries: pandas, selenium, beautifulsoup4, requests, googletrans, Pillow, and python-dotenv.
+### Output and audio
 
-### Disclaimer
+Choose any subset of `xlsx`, `csv`, `apkg`, `html` and `json`. The HTML preview includes playable audio. JSON includes source errors; a separate `*_errors.json` is written when issues occur. Recovery CSV files save progress every `autosave_every` words; set it to `0` to disable. Ctrl+C saves partial results.
 
-This tool is intended for personal and educational use only. Users should respect the terms of service of the websites being accessed.
+Only the input headword's pronunciation is downloaded. Provider priority is independent of the visible dictionary list. Norwegian defaults to Lexin with Google TTS fallback; English can use Fastdic with a selected US/UK accent and Google TTS fallback. Cached audio is reused. Anki packages include only referenced media and the font, rather than the entire media directory. Lexin/Google audio is synthesized speech.
+
+### Anki identity and previous versions
+
+V4 has a new, fixed field schema and a new default model/deck ID. **Do not reuse a V3 model ID.** The initial V4 import creates a new deck; automatic migration of V3 notes is not included. The old editions remain available through Git tags (`v3.4`, `v3.4N`, `V3.5N`, `V3.6N`).
+
+After the first V4 import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
+
+## Development
+
+`main.py` runs the pipeline, `app_config.py` validates settings, `sources.py` contains the source catalog/adapters, `lexin_scraper.py` handles Lexin, and `anki_exporter.py` builds Anki cards. Imports do not start browsers or read input files. Browser resources are created on demand and closed after processing.
+
+```powershell
+python -m unittest test_v4 test_lexin_scraper -v
+```
+
+The old `main_script.py` and `main_script(word_by_word).py` filenames are small compatibility entry points that run the same V4 application and configuration.

@@ -1,113 +1,63 @@
-import genanki
-import os
+"""Stable V4 Anki schema, configurable presentation and referenced media only."""
+import html
+from pathlib import Path
+import re
+from lexin_scraper import normalize_headword
+from sources import SOURCE_SPECS, supported
 
-# =================================================
-# UNIQUE IDS (MUST REMAIN CONSTANT)
-# =================================================
-# These identify your model and deck in Anki. 
-# If they change, Anki will create duplicates instead of updating.
-
-#####################################################################
-### Name of the Deck ###
-#####################################################################
-
-## App Deck
-MODEL_ID = 1559328412 
-DECK_ID = 2059400112
-name_of_the_deck = "Norwegian Words"
+FIELDS = ['Word', 'FrontField', *SOURCE_SPECS, 'Info']
 
 
-## Duolingo Deck
-#MODEL_ID = 1559328410
-#DECK_ID = 2059400110
-#name_of_the_deck = "MJB-Norwegian Words"
+def display_sources(config):
+    return [name for name, options in config.section('sources').items()
+            if options['enabled'] and supported(name, config.section('language')['source'])]
 
 
+def info_html(config):
+    info = config.section('info')
+    if not info['enabled']:
+        return ''
+    return ('<div class="gt-container info-container"><div class="gt-title">'
+            + html.escape(info['title']) + '</div><hr class="gt-separator">'
+            '<div class="gt-text info-text">' + html.escape(info['text'])
+            + '<div class="info-link-wrapper"><a class="info-link" href="'
+            + html.escape(info['url'], quote=True) + '" target="_blank" rel="noopener">'
+            + html.escape(info['link_text']) + '</a></div></div></div>')
 
 
-def generate_anki_package(df, output_path, media_folders, css_path):
-    print("📦 Generating Anki Package...")
-    
-    # 1. Load CSS from Styles/all.css
-    css_content = ""
-    if os.path.exists(css_path):
-        with open(css_path, 'r', encoding='utf-8') as f:
-            css_content = f.read()
-    else:
-        print(f"⚠️ Warning: CSS file not found at {css_path}")
+def answer_template(config):
+    body = '\n'.join('{{#' + name + '}}{{' + name + '}}{{/' + name + '}}'
+                     for name in display_sources(config))
+    return '{{FrontSide}}<hr id="answer">\n' + body + '\n{{#Info}}{{Info}}{{/Info}}'
 
-    # 2. Define Model (Fields must match the order in genanki.Note)
-    anki_model = genanki.Model(
-        MODEL_ID,
-        'Advanced Scraper Model',
-        fields=[
-            {'name': 'FrontField'},   # Word + Sound Tag
-            #{'name': 'Audios'},       # Audio Field
-            {'name': 'GoogleTrans'},  #
-            {'name': 'Dict_com'},
-            #{'name': 'Images'},       #
-            #{'name': 'Faraazin'},     #
-            #{'name': 'BAmooz'},       #
-            #{'name': 'Fastdic'},      #
-            #{'name': 'Thesaurus'},
-            {'name': 'Info'},
-            {'name': 'Lexin'}    # Append to preserve existing field positions.
-        ],
-        #######################################################################
-        ### This is where you define how the card looks in Anki. You can customize  ###
-        ### the HTML structure and include/exclude fields as needed.                ###
-        #######################################################################
-        templates=[{
-            'name': 'Norwegian Words',
-            'qfmt': '<div class="front">{{FrontField}}</div>',
-            'afmt': '''
-                {{FrontSide}}
-                <hr id=answer>
-                {{Lexin}}
-                {{GoogleTrans}}
-                {{Dict_com}}
-                <hr>
-                {{Info}}
-            ''',
-        }],
-        css=css_content
-    )
 
-    # 3. Create Deck
-    anki_deck = genanki.Deck(DECK_ID, name_of_the_deck) ### Name of the Deck ###
+def row_back(row, config):
+    return ''.join(str(row.get(name, '') or '') for name in display_sources(config)) + str(row.get('Info', '') or '')
 
-    # 4. Add Notes from DataFrame using your existing column names
-    for _, row in df.iterrows():
-        note = genanki.Note(
-            model=anki_model,
-            fields=[
-                str(row['Anki_Front_Field']),                   #
-                #str(row['Fastdic_Audio']),                      #
-                str(row['Processed_Content_Google_Translate']), #
-                str(row['Dict_com']),
-                #str(row['Downloaded_Images_HTML']),             #
-                #str(row['Processed_Content_Faraazin_Selenium']),#
-                #str(row['Processed_Content_B_Amooz']),          #
-                #str(row['Processed_Content_Fastdic']),          #
-                #str(row['Thesaurus_com']),                       #
-                str(row['Info']),
-                str(row.get('Lexin', '') or '')
-            ]
-        )
-        anki_deck.add_note(note)
 
-    # 5. Collect Media Paths (Images & Audio)
-    media_files = []
-    for folder in media_folders:
-        if os.path.exists(folder):
-            for file in os.listdir(folder):
-                # Anki needs absolute paths to bundle files
-                full_path = os.path.abspath(os.path.join(folder, file))
-                if os.path.isfile(full_path):
-                    media_files.append(full_path)
-
-    # 6. Build and Save
-    package = genanki.Package(anki_deck)
-    package.media_files = media_files
-    package.write_to_file(output_path)
-    print(f"✅ APKG Created at: {output_path}")
+def generate_anki_package(rows, output_path, config, media_files):
+    import genanki
+    settings = config.section('anki')
+    css = config.resolve(config.section('style')['file']).read_text(encoding='utf-8')
+    model = genanki.Model(settings['model_id'], 'Unified Vocabulary V4',
+                         fields=[{'name': name} for name in FIELDS],
+                         templates=[{'name': 'Vocabulary', 'qfmt': '<div class="front">{{FrontField}}</div>',
+                                     'afmt': answer_template(config)}], css=css, sort_field_index=0)
+    deck = genanki.Deck(settings['deck_id'], settings['deck_name'])
+    references = set()
+    for row in rows:
+        word = row['Words']
+        field_values = {'Word': html.escape(word), 'FrontField': row['FrontField'],
+                        **{name: row.get(name, '') for name in SOURCE_SPECS}, 'Info': row.get('Info', '')}
+        values = [str(field_values.get(name, '') or '') for name in FIELDS]
+        deck.add_note(genanki.Note(model=model, fields=values,
+                                 guid=genanki.guid_for(settings['model_id'], settings['deck_id'],
+                                                      config.section('language')['source'], normalize_headword(word))))
+        content = ''.join(values)
+        references.update(re.findall(r'\[sound:([^\]]+)\]', content))
+        references.update(re.findall(r'<img[^>]+src=["\']([^"\']+)', content))
+    references.update(re.findall(r'url\(["\']?([^"\')]+)', css))
+    package = genanki.Package(deck)
+    package.media_files = [str(Path(path).resolve()) for path in sorted(set(media_files))
+                           if Path(path).is_file() and Path(path).name in references]
+    package.write_to_file(str(output_path))
