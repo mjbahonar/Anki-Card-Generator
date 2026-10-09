@@ -84,3 +84,186 @@
         font-size: 1em;
     }
 }
+
+
+/* ===== Info Block ===== */
+.info-container {
+    direction: rtl;
+    text-align: right;
+}
+
+.info-text {
+    font-size: 1em;
+    line-height: 1.7;
+    color: #202124;
+}
+
+.info-link-wrapper {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.info-link {
+    display: inline-block;
+    padding: 0.5rem 1.1rem;
+    background: #007bff;
+    color: #fff !important;
+    border-radius: 0.35rem;
+    text-decoration: none;
+    font-size: 1em;
+    font-family: "Vazirmatn", Tahoma, sans-serif;
+    transition: background 0.2s;
+}
+
+.info-link:hover {
+    background: #0056b3;
+}
+
+/* Dark mode for info */
+.nightMode .info-text,
+:root[data-theme='dark'] .info-text {
+    color: #e8eaed;
+}
+
+.nightMode .info-link,
+:root[data-theme='dark'] .info-link {
+    background: #1a73e8;
+}
+
+/* ===== Dict.com Block ===== */
+.dc-container {
+    font-family: "Vazirmatn", Tahoma, sans-serif;
+    background-color: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 15px;
+    margin: 15px auto;
+    max-width: 95%;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    direction: ltr;
+    text-align: left;
+}
+
+/* Header: "vann [ˈvɑn] n" */
+.dc-header {
+    margin-bottom: 10px;
+}
+
+.dc-entry {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #c0392b;
+    margin-right: 6px;
+}
+
+.dc-pron {
+    font-size: 0.95em;
+    color: #5f6368;
+    margin-right: 6px;
+}
+
+.dc-morf {
+    font-size: 0.95em;
+    color: #27ae60;
+    font-style: italic;
+}
+
+/* Numbered translations */
+.dc-trans-list {
+    margin: 0 0 10px 0;
+    padding-left: 22px;
+}
+
+.dc-trans-item {
+    color: #1a73e8;
+    font-size: 1.05em;
+    line-height: 1.7;
+    font-weight: 500;
+}
+
+/* Direct translation (no number, e.g. "hallo → hello, hi") */
+.dc-trans-direct {
+    color: #1a73e8;
+    font-size: 1.05em;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+/* Phrases section */
+.dc-phr-title {
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #5f6368;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 8px 0 6px 0;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 8px;
+}
+
+.dc-phrases {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.dc-phrase-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1.6;
+}
+
+.dc-phr-src {
+    color: #c0392b;
+    font-style: italic;
+    font-size: 0.95em;
+}
+
+.dc-phr-sep {
+    color: #aaa;
+    font-size: 0.85em;
+}
+
+.dc-phr-tgt {
+    color: #1a73e8;
+    font-size: 0.95em;
+}
+
+/* Dark mode */
+.nightMode .dc-container,
+:root[data-theme='dark'] .dc-container {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.nightMode .dc-pron,
+.nightMode .dc-phr-title,
+.nightMode .dc-phr-sep,
+:root[data-theme='dark'] .dc-pron,
+:root[data-theme='dark'] .dc-phr-title,
+:root[data-theme='dark'] .dc-phr-sep {
+    color: #aaaaaa;
+}
+
+.nightMode .dc-phr-title,
+:root[data-theme='dark'] .dc-phr-title {
+    border-top-color: #404040;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+    .dc-container {
+        padding: 12px;
+        margin: 10px 5px;
+    }
+    .dc-phrase-row {
+        flex-direction: column;
+        gap: 2px;
+    }
+    .dc-phr-sep {
+        display: none;
+    }
+}

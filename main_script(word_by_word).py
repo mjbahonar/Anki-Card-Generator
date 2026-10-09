@@ -19,8 +19,31 @@ from scraper_functions import (
     scrape_and_process_thesaurus_com,
     scrape_and_process_fastdic_audio,
     scrape_and_process_b_amooz,
-    scrape_and_process_google_tts_audio
+    scrape_and_process_google_tts_audio,
+    scrape_and_process_dict_com_with_playwright,
+    create_shared_playwright
 )
+
+# =================================================
+# SELENIUM DRIVER (shared, opened once)
+# =================================================
+script_directory = os.path.dirname(os.path.realpath(__file__))
+chromedriver_path = os.path.join(script_directory, 'chromedriver-win64', 'chromedriver.exe')
+
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium import webdriver
+
+def get_shared_driver(chromedriver_path):
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--no-proxy-server')
+    service = Service(chromedriver_path)
+    return webdriver.Chrome(service=service, options=options)
+
+shared_driver = get_shared_driver(chromedriver_path)
 
 # =================================================
 # CONFIGURATION
@@ -41,21 +64,17 @@ os.makedirs(output_dir, exist_ok=True)
 # INFO
 # =================================================
 info_text = """
-<div class="container text-center" style="max-width: 800px; margin: 40px auto; padding: 20px;">
-    <div class="card">
-        <div class="card-body">
-            <p style="font-size: 1.1rem; margin-bottom: 1rem;">
-                This deck was created using <strong>Anki Automatic Word Generator</strong>.
-            </p>
-            <div style="margin: 1.5rem 0;">
-                <a href="https://github.com/mjbahonar/Meaning-Ankidroid" 
-                   target="_blank" 
-                   class="tappable"
-                   ontouchstart=""
-                   style="display: inline-block; padding: .6rem 1.2rem; background: #007bff; color: #fff; border-radius: .35rem; text-decoration: none; font-size: 1.1rem;">
-                    Create your own deck → Just give the app your word list
-                </a>
-            </div>
+<div class="gt-container info-container">
+    <div class="gt-title">درباره این دک</div>
+    <hr class="gt-separator">
+    <div class="gt-text info-text">
+        این دک با استفاده از <strong>Anki Automatic Word Generator</strong> ساخته شده است.
+        <div class="info-link-wrapper">
+            <a href="https://github.com/mjbahonar/Meaning-Ankidroid"
+               target="_blank"
+               class="info-link">
+                دک خودت را بساز ← فقط لیست کلمات را بده
+            </a>
         </div>
     </div>
 </div>
@@ -85,6 +104,7 @@ COLUMNS = [
     "Anki_US_Sound_Tag",       
     "Anki_NO_Sound_Tag",
     "Anki_Front_Field" ,
+    "Dict_com",
     "Info"       
 
 ]
@@ -129,6 +149,8 @@ def run_non_selenium_tasks(word, word_number):
 with keep.running():
     print("🚀 Keep-awake mode activated. Starting process...")
     processed_count = 0
+
+    playwright_obj, browser, page = create_shared_playwright()
 
     for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing words"):
         word = str(row["Words"]).strip()
@@ -177,6 +199,13 @@ with keep.running():
         #df.at[idx, "Processed_Content_Cambridge_Define_Selenium"] = (scrape_and_process_cambridge_define_with_selenium(word, word_number))
 
         processed_count += 1
+        # In the main loop, after the non-selenium block:
+        #df.at[idx, "Dict_com"] = scrape_and_process_dict_com_with_playwright(word,word_number)
+        df.at[idx, "Dict_com"] = scrape_and_process_dict_com_with_playwright(
+            word,
+            word_number,
+            page
+        )
 
         # -------------------------------
         # AUTOSAVE CHECK
@@ -185,6 +214,11 @@ with keep.running():
             autosave(df)
         
     print("✅ Process complete. PC is now allowed to sleep again.")
+
+# After the main loop, before final save:
+browser.close()
+playwright_obj.stop()
+print("🔒 Shared browser closed.")
 
 # =================================================
 # FINAL SAVE

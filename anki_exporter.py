@@ -6,14 +6,24 @@ import os
 # =================================================
 # These identify your model and deck in Anki. 
 # If they change, Anki will create duplicates instead of updating.
-MODEL_ID = 1559328412 #1559328410
-DECK_ID = 2059400112 #2059400110
-
 
 #####################################################################
 ### Name of the Deck ###
 #####################################################################
-name_of_the_deck = "Norwegian Words"  ### Name of the Deck ###
+
+## App Deck
+MODEL_ID = 1559328412 
+DECK_ID = 2059400112
+name_of_the_deck = "Norwegian Words"
+
+
+## Duolingo Deck
+#MODEL_ID = 1559328410
+#DECK_ID = 2059400110
+#name_of_the_deck = "MJB-Norwegian Words"
+
+
+
 
 def generate_anki_package(df, output_path, media_folders, css_path):
     print("📦 Generating Anki Package...")
@@ -34,6 +44,7 @@ def generate_anki_package(df, output_path, media_folders, css_path):
             {'name': 'FrontField'},   # Word + Sound Tag
             #{'name': 'Audios'},       # Audio Field
             {'name': 'GoogleTrans'},  #
+            {'name': 'Dict_com'},
             #{'name': 'Images'},       #
             #{'name': 'Faraazin'},     #
             #{'name': 'BAmooz'},       #
@@ -52,6 +63,7 @@ def generate_anki_package(df, output_path, media_folders, css_path):
                 {{FrontSide}}
                 <hr id=answer>
                 {{GoogleTrans}}
+                {{Dict_com}}
                 <hr>
                 {{Info}}
             ''',
@@ -70,6 +82,7 @@ def generate_anki_package(df, output_path, media_folders, css_path):
                 str(row['Anki_Front_Field']),                   #
                 #str(row['Fastdic_Audio']),                      #
                 str(row['Processed_Content_Google_Translate']), #
+                str(row['Dict_com']),
                 #str(row['Downloaded_Images_HTML']),             #
                 #str(row['Processed_Content_Faraazin_Selenium']),#
                 #str(row['Processed_Content_B_Amooz']),          #

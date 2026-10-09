@@ -17,6 +17,11 @@ import re
 from deep_translator import GoogleTranslator
 from gtts import gTTS
 import shutil
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from playwright.sync_api import sync_playwright
+
 
 
 ### Press CNTL+Shift+O to see the functions list in VSCode
@@ -771,3 +776,74 @@ def scrape_and_process_b_amooz(word, word_number):
     except Exception as e:
         print(f"[B-AMOOZ] ERROR: {e}")
         return f"B-Amooz error: {e}"
+
+
+
+# =========================
+# DICT.com
+# =========================
+def scrape_and_process_dict_com_with_playwright(
+    word,
+    word_number,
+    page
+):
+    print(f"[DICT.COM] ({word_number}) {word}")
+
+    url = f"https://dict.com/norwegian-english/{word}"
+
+    try:
+        page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=60000
+        )
+
+        html = page.content()
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        table = soup.find("table", class_="entry")
+
+        if not table:
+            print(f"[DICT.COM] No entry table found for '{word}'")
+            return ""
+
+        tbody = table.find("tbody")
+
+        if not tbody:
+            print(f"[DICT.COM] No tbody found for '{word}'")
+            return ""
+
+        for tag in tbody.find_all(["script", "style"]):
+            tag.decompose()
+
+        html_output = f"""
+<div class='dc-container'>
+    <div class='gt-title'>Dict.com</div>
+    <hr class='gt-separator'>
+    <table>{tbody.decode_contents()}</table>
+</div>
+""".strip()
+
+        print(f"[DICT.COM] DONE: {word}")
+
+        return html_output
+
+    except Exception as e:
+        print(f"[DICT.COM] ERROR: {e}")
+        return ""
+    
+
+# =========================
+# SHARED BROWSER.com
+# =========================
+def create_shared_playwright():
+    playwright = sync_playwright().start()
+
+    browser = playwright.chromium.launch(
+        headless=True
+    )
+
+    page = browser.new_page()
+
+    return playwright, browser, page
