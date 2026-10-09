@@ -1,5 +1,13 @@
 # Release notes
 
+## v4.0.1 — 2026-10-09
+
+- Removed obsolete launchers (`main_script.py` and `main_script(word_by_word).py`), unused V3 styles and screenshots, and archived/extra-language README files. Keep `main.py` as the single entry point and English/Persian as the maintained README languages.
+- Preserved all Excel workbooks and the active V4 configuration, dictionaries, styles and tests.
+- Added a release policy: lowercase `vMAJOR.MINOR.PATCH` tags, matching runtime versions and GitHub releases, immutable published tags and release notes with validation/limitations. Historical tags remain unchanged.
+- Faraazin was enabled for `house`, `book` and `eat`. Both its bare and `www` domains failed DNS resolution from this environment; other sources and all output formats completed. Geographic blocking is not confirmed.
+- Validation: 21 automated tests, configuration check, and checksum verification of every pre-existing Excel workbook.
+
 ## V4.0 — 2026-10-09
 
 Unified application for English and Norwegian. One `config.toml` controls input workbook/sheet/column, language, source toggles/order, audio priority/cache, deck/model identity, output formats, shared styling and the English Info footer. Run `main.py`.

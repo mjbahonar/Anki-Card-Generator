@@ -13,7 +13,7 @@ from app_config import ConfigError, load_config
 from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
 from lexin_scraper import normalize_headword
 
-VERSION = '4.0'
+VERSION = '4.0.1'
 
 
 def read_words(config):

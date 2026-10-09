@@ -1,4 +1,4 @@
-# Anki Card Generator — V4.0
+# Anki Card Generator — v4.0.1
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
@@ -110,7 +110,20 @@ After the first V4 import, keep the deck/model IDs fixed. Disabling or reorderin
 python -m unittest test_v4 test_lexin_scraper -v
 ```
 
-The old `main_script.py` and `main_script(word_by_word).py` filenames are small compatibility entry points that run the same V4 application and configuration.
+`main.py` is the only application entry point. Obsolete V3 launchers, styles, screenshots and documentation have been removed. Only the English and Persian README files are maintained.
+
+| File | Purpose |
+| --- | --- |
+| `config.toml` | The only file you edit for everyday settings |
+| `main.py` | The only file you run |
+| `app_config.py` | Configuration validation |
+| `sources.py` | Dictionary and audio adapters |
+| `lexin_scraper.py` | Lexin-specific extraction |
+| `anki_exporter.py` | Stable Anki model and package generation |
+| `Styles/cards.css` | The shared card style |
+| `test_v4.py`, `test_lexin_scraper.py` | Automated tests |
+
+Release tags now follow `vMAJOR.MINOR.PATCH`, without language suffixes. Historical tags are preserved. See [the release policy](RELEASING.md).
 
 ## Troubleshooting
 
@@ -122,4 +135,4 @@ The old `main_script.py` and `main_script(word_by_word).py` filenames are small 
 | Wrong words or input error | `input.file`, `sheet`, `header` and `word_column`; run `python main.py --check` |
 | A source stops returning content | The site's availability or changed markup; other sources can still complete |
 
-V4 live checks covered Lexin, Dict.com, Fastdic and Cambridge. Faraazin is available in the source catalog but was disabled in the published English test preview, so that preview does not establish whether Faraazin is currently working.
+V4 live checks covered Lexin, Dict.com, Fastdic and Cambridge. Faraazin was also enabled in a later three-word test, but both its `www` and bare hostnames failed DNS resolution in the test environment. This does not establish geographic blocking. Try another network or DNS resolver before attributing the issue to location; no Faraazin content was retrieved.
