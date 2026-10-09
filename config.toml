@@ -1,4 +1,4 @@
-# Version 4: edit this file, then run: python main.py
+# Edit this file, then run: python main.py
 # All relative paths are resolved from this file's directory.
 
 [language]
@@ -21,9 +21,9 @@ autosave_every = 5             # Recovery CSV; 0 disables autosave
 
 [anki]
 deck_name = "My Vocabulary"
-deck_id = 2059400440           # New V4 deck; keep fixed after the first import
-model_id = 1559328440          # V4 unified model; do not reuse a V3 model ID
-# Give a separate deck a separate deck_id. English and Norwegian share V4's model.
+deck_id = 2059400450           # New Oxford schema deck; keep fixed after the first import
+model_id = 1559328450          # Do not reuse a V3/V4 model ID
+# Give a separate deck a separate deck_id. English and Norwegian share the unified model.
 
 [style]
 file = "Styles/cards.css"      # Current V3.6N look, shared by every language
@@ -88,5 +88,10 @@ enabled = false               # English definitions
 examples_per_definition = 3
 
 [sources.images]
-enabled = false               # Google image results
+enabled = false               # Vocabulary images, with provider fallback
 count = 3
+priority = ["google", "commons"] # Use ["commons"] to skip Google
+
+[sources.oxford]
+enabled = true                # English definitions; audio still uses audio.priority
+examples_per_definition = 3

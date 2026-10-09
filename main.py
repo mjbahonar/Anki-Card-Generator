@@ -14,7 +14,7 @@ from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audi
 from lexin_scraper import normalize_headword
 from console_report import ConsoleReport, concise
 
-VERSION = '4.0.2'
+VERSION = '5.0.0'
 
 
 def read_words(config):
@@ -198,7 +198,7 @@ def run(config, context_factory=SourceContext):
 def main(argv=None):
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
-    parser = argparse.ArgumentParser(description='Unified Anki Card Generator V4')
+    parser = argparse.ArgumentParser(description='Unified Anki Card Generator')
     parser.add_argument('--config', type=Path, default=Path(__file__).with_name('config.toml'))
     parser.add_argument('--check', action='store_true', help='Validate config and Excel without fetching sources')
     args = parser.parse_args(argv)

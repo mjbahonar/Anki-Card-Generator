@@ -98,8 +98,8 @@ def load_config(path):
             raise ConfigError(f'language.{key} must be a language code such as no, en or fa')
     if data['audio']['english_accent'] not in ['us', 'uk']:
         raise ConfigError('audio.english_accent must be us or uk')
-    if data['anki']['model_id'] in [1559328410, 1559328412]:
-        raise ConfigError('V4 has a new field schema. Use its new model_id (1559328440), not a V3 model ID.')
+    if data['anki']['model_id'] in [1559328410, 1559328412, 1559328440]:
+        raise ConfigError('The Oxford schema needs a new model_id (1559328450); do not reuse V3/V4 model IDs.')
     priority = data['audio']['priority']
     if not isinstance(priority, list) or any(item not in ['lexin', 'fastdic', 'google_tts'] for item in priority):
         raise ConfigError('audio.priority supports lexin, fastdic and google_tts')
@@ -112,13 +112,17 @@ def load_config(path):
             raise ConfigError(f'Unknown source: {name}. Available: {", ".join(SOURCE_SPECS)}')
         if not isinstance(settings, dict) or type(settings.get('enabled')) is not bool:
             raise ConfigError(f'sources.{name}.enabled must be true or false')
-        allowed = ({'enabled', 'count'} if name == 'images' else
-                   {'enabled', 'examples_per_definition'} if name in ['fastdic', 'cambridge'] else {'enabled'})
+        allowed = ({'enabled', 'count', 'priority'} if name == 'images' else
+                   {'enabled', 'examples_per_definition'} if name in ['fastdic', 'cambridge', 'oxford'] else {'enabled'})
         if set(settings) - allowed:
             raise ConfigError(f'Unknown option in sources.{name}')
         if name == 'images' and (type(settings.get('count', 3)) is not int or not 1 <= settings.get('count', 3) <= 10):
             raise ConfigError('sources.images.count must be between 1 and 10')
-        if name in ['fastdic', 'cambridge'] and (type(settings.get('examples_per_definition', 3)) is not int
+        if name == 'images':
+            priority = settings.get('priority', ['google', 'commons'])
+            if not isinstance(priority, list) or not priority or any(p not in ['google', 'commons'] for p in priority):
+                raise ConfigError('sources.images.priority must contain google and/or commons')
+        if name in ['fastdic', 'cambridge', 'oxford'] and (type(settings.get('examples_per_definition', 3)) is not int
                                                  or settings.get('examples_per_definition', 3) < 0):
             raise ConfigError(f'sources.{name}.examples_per_definition must be an integer >= 0')
     config = Config(path, data)

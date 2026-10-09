@@ -35,6 +35,7 @@ SOURCE_SPECS = {
     'google_dictionary': SourceSpec('Google Dictionary', ('en',)),
     'cambridge': SourceSpec('Cambridge Dictionary', ('en',)),
     'images': SourceSpec('Images'),
+    'oxford': SourceSpec("Oxford Learner's Dictionary", ('en',)),
 }
 
 
@@ -188,6 +189,9 @@ class SourceContext:
 
 def dictionary_content(name, word, number, ctx):
     encoded = quote(word, safe='')
+    if name == 'oxford':
+        from oxford_scraper import oxford_content
+        return block(name, oxford_content(word, ctx))
     if name == 'lexin':
         priority = ctx.config.section('audio')['priority']
         audio = ctx.config.section('audio')['enabled'] and priority and priority[0] == 'lexin'
@@ -287,27 +291,8 @@ def dictionary_content(name, word, number, ctx):
             return block(name, ''.join(pieces))
         return block(name, ''.join(str(el) for el in soup.select(selector)))
     if name == 'images':
-        from PIL import Image
-        soup = BeautifulSoup(ctx.fetch(f'https://www.google.com/search?tbm=isch&q={encoded}+clipart').text, 'html.parser')
-        markup = []
-        count = ctx.config.section('sources')[name].get('count', 3)
-        for img in soup.select('img')[1:count + 1]:
-            try:
-                src = urljoin('https://www.google.com/', img.get('src', ''))
-                data = ctx.fetch(src).content
-                image = Image.open(BytesIO(data))
-                image.thumbnail((800, 800))
-                filename = audio_filename(word, 'image').removesuffix('.mp3') + f'_{len(markup)}.png'
-                ctx.images_dir.mkdir(parents=True, exist_ok=True)
-                path = ctx.images_dir / filename
-                image.save(path, format='PNG')
-                ctx.media.add(path.resolve())
-                markup.append(f'<img src="{filename}" alt="{html.escape(word, quote=True)}">')
-            except Exception as exc:
-                ctx.issue(word, 'images', exc)
-        if not markup:
-            raise ValueError('No images downloaded')
-        return block(name, ''.join(markup))
+        from image_sources import download_images
+        return block(name, download_images(word, ctx))
     raise ValueError(f'No adapter for {name}')
 
 

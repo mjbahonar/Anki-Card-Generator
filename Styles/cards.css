@@ -8,13 +8,44 @@
 .source-content { line-height: 1.7; overflow-wrap: break-word; color: #202124; }
 .source-content .definition-group { border-bottom: 1px solid rgba(127,127,127,.2); padding: 10px 0; }
 .source-content .definition-group:last-child { border-bottom: 0; }
-.source-content .part-of-speech { direction: ltr; text-align: left; color: #5f6368; font-size: .85em; }
+.source-content .part-of-speech {
+    display: table;
+    direction: ltr;
+    text-align: left;
+    color: #174b78;
+    background: #e5f0fa;
+    border: 1px solid #bdd4e9;
+    border-radius: 6px;
+    padding: 3px 10px;
+    margin: 8px 0 14px;
+    font-size: .9em;
+    font-weight: 700;
+    line-height: 1.5;
+}
+.source-content .oxford-entry + .oxford-entry {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 2px solid #bdd4e9;
+}
 .source-content p { margin: 6px 0; }
 .source-content .example { color: #5f6368; font-size: .95em; margin: 4px 0; }
 .source-content .example[dir="ltr"] { text-align: left; }
 .source-content .example[dir="rtl"] { text-align: right; }
-.nightMode .source-content .example, .nightMode .source-content .part-of-speech { color: #bbbbbb; }
+.nightMode .source-content .example { color: #bbbbbb; }
+.nightMode .source-content .part-of-speech,
+:root[data-theme='dark'] .source-content .part-of-speech {
+    color: #d4eaff;
+    background: #213b50;
+    border-color: #53728c;
+}
+.nightMode .source-content .oxford-entry + .oxford-entry,
+:root[data-theme='dark'] .source-content .oxford-entry + .oxford-entry {
+    border-color: #53728c;
+}
 .source-content img { max-width: 100%; height: auto; border-radius: 8px; }
+.source-content .image-result { margin: 12px 0 20px; }
+.source-content .image-credit { font-size: .72em; line-height: 1.5; overflow-wrap: anywhere; color: #5f6368; }
+.nightMode .source-content .image-credit, :root[data-theme='dark'] .source-content .image-credit { color: #bbbbbb; }
 .source-content table { border-collapse: collapse; max-width: 100%; }
 .source-content td, .source-content th { border: 1px solid #e0e0e0; padding: 6px; }
 .gt-container.info-container, .info-container .info-text { direction: ltr; text-align: left; }

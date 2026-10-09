@@ -1,4 +1,8 @@
-# Anki Card Generator — v4.0.2
+# Anki Card Generator — v5.0.0 (unreleased)
+
+Oxford is enabled for English in `[sources.oxford]`; `examples_per_definition = 3` limits examples for each main definition. It follows exact same-word entry links to collect all available parts of speech, without including compounds. It uses direct HTML requests and downloads no Oxford audio. Fastdic/Google TTS remain the audio providers.
+
+**V5 migration:** adding Oxford changes the fixed Anki schema. Defaults now use model `1559328450` and deck `2059400450`. Import into this new deck; do not reuse a V4 model ID or expect automatic migration of review history. Existing V4 decks remain available. Keep the new IDs fixed after the first V5 import, regardless of source toggles.
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
@@ -6,7 +10,7 @@ Turn an Excel word list into styled Anki cards with definitions, examples, infle
 
 **Edit `config.toml`. Run `python main.py`. Import the generated `.apkg` into Anki or AnkiDroid.**
 
-## What V4 includes
+## What the application includes
 
 - Dictionary selection and display order without editing Python or Anki templates.
 - Norwegian Lexin entries with inflections, plus English dictionary sources and configurable translation.
@@ -26,7 +30,7 @@ python main.py --check
 python main.py
 ```
 
-Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a new V4 deck, with Lexin first, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
+Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a new V5 deck, with Lexin first, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
 
 Generated files appear in `Output`. Start with `input.max_words = 3` for a small trial; set it to `0` to process the entire list.
 
@@ -48,7 +52,7 @@ Relative paths are resolved from the configuration file's directory, regardless 
 
 ### Switching to English
 
-In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the unified V4 `model_id` can stay the same.
+In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the unified V5 `model_id` can stay the same.
 
 For example, change the existing settings to these values:
 
@@ -80,6 +84,7 @@ Edit the existing sections rather than adding duplicate TOML sections. Dictionar
 | `dict_com` | Norwegian / English | Translations and phrases in the other language |
 | `fastdic`, `faraazin`, `b_amooz` | English | Persian meanings |
 | `dictionary_com`, `cambridge` | English | English definitions |
+| `oxford` | English | Oxford Learner's main definitions and examples; no Oxford audio |
 | `thesaurus` | English | Synonyms / antonyms |
 | `google_dictionary` | English | Google's dictionary result |
 | `images` | Configurable | Downloaded image results; `count` controls the limit |
@@ -98,9 +103,8 @@ Only the input headword's pronunciation is downloaded. Provider priority is inde
 
 ### Anki identity and previous versions
 
-V4 has a new, fixed field schema and a new default model/deck ID. **Do not reuse a V3 model ID.** The initial V4 import creates a new deck; automatic migration of V3 notes is not included. The old editions remain available through Git tags (`v3.4`, `v3.4N`, `V3.5N`, `V3.6N`).
 
-After the first V4 import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
+After the first V5 import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
 
 ## Development
 
@@ -127,6 +131,8 @@ python -m unittest test_v4 test_lexin_scraper -v
 Release tags now follow `vMAJOR.MINOR.PATCH`, without language suffixes. Historical tags are preserved. See [the release policy](RELEASING.md).
 
 ## Troubleshooting
+
+Images use `sources.images.priority = ["google", "commons"]`: try Google first, then Wikimedia Commons when Google is unavailable or fewer images were downloaded. Set `enabled = true` and `count = 3` to enable images; `["commons"]` skips Google. Images are stored locally and bundled into Anki, with Commons attribution/license text. Results are automatic and may need review for ambiguous words.
 
 Dict.com currently uses the English–Norwegian pair: English input returns Norwegian meanings, not Persian. Disable it for an English–Persian deck; use Fastdic for Persian meanings and Cambridge for English definitions.
 

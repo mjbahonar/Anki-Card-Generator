@@ -1,5 +1,15 @@
 # Release notes
 
+## v5.0.0 — Unreleased
+
+- Restored vocabulary images with configurable Google/Commons fallback, including inline Google images, local PNG media, per-provider diagnostics and Commons attribution. Live `book`, `cat`, `apple` downloaded three images each through Commons after Google returned no results.
+
+- Follow Oxford's same-headword entry links to include every available part of speech, deduplicating entries and excluding compounds. Handle nested single-sense definitions. Live verification: `book` (noun/verb), `round` (five parts of speech), `fast` (four); all output formats completed without issues.
+
+- Added an English-only Oxford Learner's Dictionary source using direct HTML, exact headword validation, main definitions and a configurable number of examples per definition. Oxford pronunciation is not requested; existing Fastdic/Google TTS priority remains unchanged.
+- Anki schema migration: a new Oxford field requires a new default model (`1559328450`) and deck (`2059400450`). Do not reuse V4 model IDs. Existing V4 decks are preserved; review history is not migrated automatically. Source toggles and ordering remain stable within the new model.
+- Validation: live `book`, `house`, `eat` with Oxford, Fastdic and Cambridge; all five formats completed without errors and Fastdic audio was downloaded for each word. Automated coverage includes exact headword rejection, example limits and exclusion of audio/site controls.
+
 ## v4.0.2 — 2026-10-09
 
 - Added readable per-word source statuses, elapsed times, audio status and a final console report with source totals, issues and output paths.

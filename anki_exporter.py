@@ -39,7 +39,7 @@ def generate_anki_package(rows, output_path, config, media_files):
     import genanki
     settings = config.section('anki')
     css = config.resolve(config.section('style')['file']).read_text(encoding='utf-8')
-    model = genanki.Model(settings['model_id'], 'Unified Vocabulary V4',
+    model = genanki.Model(settings['model_id'], 'Unified Vocabulary V5',
                          fields=[{'name': name} for name in FIELDS],
                          templates=[{'name': 'Vocabulary', 'qfmt': '<div class="front">{{FrontField}}</div>',
                                      'afmt': answer_template(config)}], css=css, sort_field_index=0)

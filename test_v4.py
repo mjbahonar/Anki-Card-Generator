@@ -24,6 +24,84 @@ ROOT = Path(__file__).resolve().parent
 
 
 class V4Tests(unittest.TestCase):
+    def test_image_fallback_persists_media_and_credits(self):
+        from io import BytesIO
+        from PIL import Image
+        from image_sources import download_images
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        buffer = BytesIO()
+        Image.new('RGB', (100, 100), 'red').save(buffer, format='PNG')
+        context.fetch = Mock(return_value=Mock(content=buffer.getvalue()))
+        with patch('image_sources.candidates', side_effect=[ValueError('Google blocked'),
+                   [('https://example.com/image.png', 'Artist | CC BY 4.0')]]):
+            result = download_images('cat', context)
+        self.assertIn('CC BY 4.0', result)
+        self.assertIn('image_commons_no_cat', result)
+        self.assertEqual(len(context.media), 1)
+        self.assertTrue(next(iter(context.media)).is_file())
+        self.assertEqual(context.errors[0]['source'], 'images_google')
+
+    def test_images_skip_invalid_response_and_fill_requested_count(self):
+        from io import BytesIO
+        from PIL import Image
+        from image_sources import download_images
+        self.config.section('sources')['images'].update(count=1, priority=['commons'])
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        buffer = BytesIO()
+        Image.new('RGB', (90, 90), 'blue').save(buffer, format='PNG')
+        context.fetch = Mock(side_effect=[Mock(content=b'not an image'), Mock(content=buffer.getvalue())])
+        with patch('image_sources.candidates', return_value=[('https://example.com/bad',''),
+             ('https://example.com/good','credit'), ('https://example.com/extra','')]):
+            result = download_images('book', context)
+        self.assertEqual(result.count('<img'), 1)
+        self.assertEqual(context.fetch.call_count, 2)
+
+    def test_oxford_all_parts_of_speech_without_compounds_or_duplicate_fetches(self):
+        self.config.section('language')['source'] = 'en'
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        def response(pos, index, links):
+            return Mock(url=f'https://www.oxfordlearnersdictionaries.com/definition/english/round_{index}', text=f'''
+            <div class="entry"><h1 class="headword">round</h1><span class="pos">{pos}</span>
+            <li class="sense"><span class="sensetop"><span class="def">{pos} definition</span></span></li></div>{links}''')
+        links = ''.join(f'<a href="/definition/english/round_{i}">round</a>' for i in range(1, 6))
+        links += '<a href="/definition/english/round-up">compound</a><a href="https://other.example/definition/english/round_6">other</a>'
+        context.fetch = Mock(side_effect=[response(pos, i, links) for i, pos in enumerate(
+            ['adjective', 'adverb', 'preposition', 'noun', 'verb'], 1)])
+        result = dictionary_content('oxford', 'round', 1, context)
+        for pos in ['adjective', 'adverb', 'preposition', 'noun', 'verb']:
+            self.assertIn(pos + ' definition', result)
+        self.assertEqual(context.fetch.call_count, 5)
+        self.assertNotIn('compound', result)
+
+    def test_oxford_schema_rejects_old_model_id(self):
+        text = (ROOT / 'config.toml').read_text(encoding='utf-8')
+        path = self.directory / 'old_model.toml'
+        path.write_text(text.replace('model_id = 1559328450', 'model_id = 1559328440'), encoding='utf-8')
+        with self.assertRaisesRegex(ConfigError, 'new model_id'):
+            load_config(path)
+
+    def test_oxford_exact_entry_examples_and_no_audio_request(self):
+        self.config.section('language')['source'] = 'en'
+        self.config.section('sources')['oxford']['examples_per_definition'] = 1
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        context.fetch = Mock(return_value=Mock(text='''<div class="entry"><h1 class="headword">book</h1>
+          <span class="pos">noun</span><ol><li class="sense"><span class="def">printed &amp; bound pages</span>
+          <ul class="examples"><li><span class="x">first example</span></li><li><span class="x">second example</span></li></ul>
+          <div class="unbox">advertisement</div><div data-src-mp3="audio.mp3">play audio</div></li></ol>
+          <div class="idioms"><li class="sense"><span class="def">unrelated idiom</span></li></div></div>'''))
+        result = dictionary_content('oxford', 'book', 1, context)
+        self.assertIn('printed &amp; bound pages', result)
+        self.assertIn('first example', result)
+        for unwanted in ['second example', 'advertisement', 'audio.mp3', 'play audio', 'unrelated idiom']:
+            self.assertNotIn(unwanted, result)
+        context.fetch.assert_called_once()
+        with self.assertRaisesRegex(ValueError, 'exact Oxford'):
+            dictionary_content('oxford', 'books', 1, context)
+
     def test_browser_launch_uses_configured_timeout(self):
         context = SourceContext(self.config)
         self.addCleanup(context.close)
@@ -49,7 +127,7 @@ class V4Tests(unittest.TestCase):
         path = self.directory / 'invalid.toml'
         for old, new, message in [('timeout_seconds = 20', 'timeout_seconds = nan', 'timeout_seconds'),
                                   ('word_delay_seconds = 0.5', 'word_delay_seconds = inf', 'word_delay_seconds'),
-                                  ('deck_id = 2059400440', 'deck_id = 9223372036854775808', 'SQLite')]:
+                                  ('deck_id = 2059400450', 'deck_id = 9223372036854775808', 'SQLite')]:
             with self.subTest(message=message):
                 path.write_text(text.replace(old, new), encoding='utf-8')
                 with self.assertRaisesRegex(ConfigError, message):
