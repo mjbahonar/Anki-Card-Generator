@@ -21,6 +21,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from playwright.sync_api import sync_playwright
+from lexin_scraper import audio_filename
+from urllib.parse import quote
 
 
 
@@ -252,9 +254,9 @@ def scrape_and_process_faraazin_with_selenium(word, word_number):
 def scrape_and_process_google_translate(word, word_number):
     time.sleep(1 + random.uniform(0, 2))
     try:
-        # Translate from Norwegian to English
+        # Translate from Norwegian to Persian
         translated_text = GoogleTranslator(source='no', target='fa').translate(word)
-        print(f"Word {word_number}: '{word}' translated by Google Translate (NO→EN)")
+        print(f"Word {word_number}: '{word}' translated by Google Translate (NO→FA)")
 
         html_output = f"""
         <div class="gt-container">
@@ -690,27 +692,24 @@ def scrape_and_process_google_tts_audio(word, word_number):
         load_dotenv()
         media_dir = os.getenv("ADDRESS")
 
-        local_audio_dir = os.path.join(os.getcwd(), "Audio")
+        local_audio_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Audio")
         os.makedirs(local_audio_dir, exist_ok=True)
 
-        if not media_dir:
-            print("[GTTSAUDIO] ERROR: ADDRESS not set")
-            return ""
-
-        safe_word = str(word).replace(' ', '_')
-        filename = f"google_no_{safe_word}.mp3"
+        filename = audio_filename(word, 'google')
         local_path = os.path.join(local_audio_dir, filename)
-        media_path = os.path.join(media_dir, filename)
 
         # Generate TTS and save locally
         tts = gTTS(text=str(word), lang='no')
         tts.save(local_path)
 
         # Copy to media location
-        try:
-            shutil.copyfile(local_path, media_path)
-        except Exception as e:
-            print(f"[GTTSAUDIO] Warning: could not copy to ADDRESS: {e}")
+        if media_dir:
+            try:
+                media_path = os.path.join(media_dir, filename)
+                if os.path.abspath(local_path) != os.path.abspath(media_path):
+                    shutil.copyfile(local_path, media_path)
+            except Exception as e:
+                print(f"[GTTSAUDIO] Warning: could not copy to ADDRESS: {e}")
 
         print(f"[GTTSAUDIO] Saved Norwegian TTS for '{word}' as {filename}")
 
@@ -789,7 +788,7 @@ def scrape_and_process_dict_com_with_playwright(
 ):
     print(f"[DICT.COM] ({word_number}) {word}")
 
-    url = f"https://dict.com/norwegian-english/{word}"
+    url = f"https://dict.com/engelsk-norsk/{quote(str(word), safe='')}"
 
     try:
         page.goto(
@@ -798,30 +797,33 @@ def scrape_and_process_dict_com_with_playwright(
             timeout=60000
         )
 
-        html = page.content()
-
-        soup = BeautifulSoup(html, "html.parser")
-
-        table = soup.find("table", class_="entry")
-
-        if not table:
-            print(f"[DICT.COM] No entry table found for '{word}'")
+        page.locator('#entry-body .main-body sense').first.wait_for(timeout=20000)
+        soup = BeautifulSoup(page.content(), "html.parser")
+        header = soup.select_one('#entry-header .lex_ful_entr')
+        if not header or header.get_text(strip=True).casefold() != str(word).strip().casefold():
+            print(f"[DICT.COM] No exact entry found for '{word}'")
             return ""
-
-        tbody = table.find("tbody")
-
-        if not tbody:
-            print(f"[DICT.COM] No tbody found for '{word}'")
-            return ""
-
-        for tag in tbody.find_all(["script", "style"]):
+        # Only the requested entry: exclude advertising and full-text search results.
+        sections = soup.select('#entry-header, #entry-rest, #entry-body > .main-body')
+        content = BeautifulSoup(''.join(str(section) for section in sections), 'html.parser')
+        for tag in content.select('script, style, iframe, button, svg, audio, img, .ex-tooltip'):
             tag.decompose()
+        for tag in content.find_all(True):
+            if tag.name == 'w':
+                tag.unwrap()
+                continue
+            if tag.name == 'sense':
+                tag.name = 'div'
+                tag['class'] = ['dc-sense']
+            if tag.name == 'a':
+                tag.name = 'span'
+            tag.attrs = {key: value for key, value in tag.attrs.items() if key == 'class'}
 
         html_output = f"""
 <div class='dc-container'>
     <div class='gt-title'>Dict.com</div>
     <hr class='gt-separator'>
-    <table>{tbody.decode_contents()}</table>
+    <div class="dc-content">{content}</div>
 </div>
 """.strip()
 

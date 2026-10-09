@@ -2,6 +2,14 @@
 
 # Automatic Anki Card Generator: The Automated Vocabulary Card Architect
 
+### Norwegian edition — V3.6N
+
+The `Norwegian-to-English` branch generates Norwegian cards with Lexin first, Google Translate (Norwegian → Persian) second, and Dict.com third. Lexin retains the first exact Bokmål headword, its definitions, inflection tables, examples, idioms and compounds. The front uses Lexin's synthesized headword pronunciation, with Google TTS as a fallback. Inflection and compound audio is not downloaded.
+
+Run `main_script(word_by_word).py` with a headerless `New Words.xlsx`. Results are saved in `Output` as Excel, CSV and an Anki package with bundled audio. Lexin and Dict.com use Playwright to load their JavaScript content. Install the dependencies in `requirements.txt` and the Playwright Chromium browser (`python -m playwright install chromium`).
+
+See [V3.6N release notes](CHANGELOG.md) for changes, validation and known limitations. The English features described below refer to the earlier English edition.
+
 ![](Docs/English.png)
 
 Meaning-Ankidroid is a professional-grade Python utility designed to transform a simple list of words into rich, multimedia-enhanced flashcards. Automating data collection from 7 premium dictionaries and high-quality media sources allows language learners to focus on memorization rather than card creation.

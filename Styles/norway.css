@@ -1,4 +1,29 @@
 /* Font definition for Anki */
+/* Lexin follows the existing card container, with left-to-right dictionary content. */
+.gt-container.lexin-container { direction: ltr; text-align: left; }
+.lexin-content { color: #202124; line-height: 1.65; overflow-wrap: break-word; }
+.lexin-content ul.search-table { list-style: none; padding: 0; margin: 0; }
+.lexin-content dl { display: grid; grid-template-columns: minmax(100px, 25%) minmax(0, 1fr); gap: 10px; margin: 8px 0; }
+.lexin-content dt { font-size: .85em; color: #5f6368; }
+.lexin-content dt span { display: block; }
+.lexin-content dd { margin: 0; }
+.lexin-content dd em::before { content: " "; }
+.lexin-content .dictionary-ordbank { overflow-x: auto; margin: 12px 0; }
+.lexin-content table { border-collapse: collapse; width: 100%; min-width: 450px; font-size: .9em; }
+.lexin-content th, .lexin-content td { border: 1px solid #e0e0e0; padding: 8px; text-align: left; }
+.lexin-content th { background: rgba(127,127,127,.08); font-weight: 600; }
+.lexin-content th { overflow-wrap: normal; }
+.lexin-content hr { border: 0; border-top: 1px solid #e0e0e0; margin: 14px 0; }
+.nightMode .lexin-content, :root[data-theme='dark'] .lexin-content { color: #e8eaed; }
+.nightMode .lexin-content dt, :root[data-theme='dark'] .lexin-content dt { color: #bbbbbb; }
+.nightMode .lexin-content th, .nightMode .lexin-content td, .nightMode .lexin-content hr,
+:root[data-theme='dark'] .lexin-content th, :root[data-theme='dark'] .lexin-content td,
+:root[data-theme='dark'] .lexin-content hr { border-color: #404040; }
+@media (max-width: 600px) {
+    .lexin-content dl { grid-template-columns: minmax(75px, 25%) minmax(0, 1fr); gap: 6px; }
+    .lexin-content th, .lexin-content td { padding: 5px; }
+}
+
 @font-face {
     font-family: "Vazirmatn";
     src: url("_Vazirmatn.ttf");
@@ -131,6 +156,14 @@
 }
 
 /* ===== Dict.com Block ===== */
+.dc-content { line-height: 1.7; }
+.dc-content .lex_ful_entr { font-size: 1.2em; font-weight: bold; color: #c0392b; }
+.dc-content .lex_ful_morf { color: #27ae60; font-style: italic; }
+.dc-content .lex_ful_tran { color: #1a73e8; font-weight: 500; }
+.dc-content .dc-sense { margin: 10px 0; }
+.dc-content .lex_ful_coll2 { margin: 6px 0; }
+.dc-content .lex_ful_coll2s { display: block; color: #c0392b; font-style: italic; }
+.dc-content .lex_ful_coll2t { display: block; color: #1a73e8; }
 .dc-container {
     font-family: "Vazirmatn", Tahoma, sans-serif;
     background-color: #f8f9fa;

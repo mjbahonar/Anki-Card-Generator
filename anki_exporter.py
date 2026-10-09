@@ -50,7 +50,8 @@ def generate_anki_package(df, output_path, media_folders, css_path):
             #{'name': 'BAmooz'},       #
             #{'name': 'Fastdic'},      #
             #{'name': 'Thesaurus'},
-            {'name': 'Info'}    #
+            {'name': 'Info'},
+            {'name': 'Lexin'}    # Append to preserve existing field positions.
         ],
         #######################################################################
         ### This is where you define how the card looks in Anki. You can customize  ###
@@ -62,6 +63,7 @@ def generate_anki_package(df, output_path, media_folders, css_path):
             'afmt': '''
                 {{FrontSide}}
                 <hr id=answer>
+                {{Lexin}}
                 {{GoogleTrans}}
                 {{Dict_com}}
                 <hr>
@@ -88,7 +90,8 @@ def generate_anki_package(df, output_path, media_folders, css_path):
                 #str(row['Processed_Content_B_Amooz']),          #
                 #str(row['Processed_Content_Fastdic']),          #
                 #str(row['Thesaurus_com']),                       #
-                str(row['Info'])
+                str(row['Info']),
+                str(row.get('Lexin', '') or '')
             ]
         )
         anki_deck.add_note(note)
