@@ -36,6 +36,8 @@ SOURCE_SPECS = {
     'cambridge': SourceSpec('Cambridge Dictionary', ('en',)),
     'images': SourceSpec('Images'),
     'oxford': SourceSpec("Oxford Learner's Dictionary", ('en',)),
+    'bokmalsordboka': SourceSpec('Bokmålsordboka', ('no', 'nb', 'nn')),
+    'nynorskordboka': SourceSpec('Nynorskordboka', ('no', 'nb', 'nn')),
 }
 
 
@@ -48,7 +50,7 @@ def clean_html(markup):
     for tag in soup.select('script, style, iframe, svg, button, input, form, link, audio, mtab, .ex-tooltip'):
         tag.decompose()
     allowed = {'div', 'span', 'p', 'br', 'hr', 'b', 'strong', 'em', 'i', 'ul', 'ol', 'li',
-               'dl', 'dt', 'dd', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'h2', 'h3', 'h4', 'sup', 'sub', 'img'}
+               'dl', 'dt', 'dd', 'table', 'caption', 'thead', 'tbody', 'tr', 'td', 'th', 'h2', 'h3', 'h4', 'sup', 'sub', 'img', 'a'}
     for tag in list(soup.find_all(True)):
         if tag.name == 'sense':
             tag.name = 'div'
@@ -56,7 +58,10 @@ def clean_html(markup):
         if tag.name not in allowed:
             tag.unwrap()
             continue
-        tag.attrs = {k: v for k, v in tag.attrs.items() if k in {'class', 'lang', 'colspan', 'rowspan', 'src', 'alt', 'dir'}}
+        tag.attrs = {k: v for k, v in tag.attrs.items() if k in {'class', 'lang', 'colspan', 'rowspan', 'src', 'alt', 'dir', 'href'}}
+        if tag.name == 'a' and not str(tag.get('href', '')).startswith(('https://', 'http://')):
+            tag.unwrap()
+            continue
         if tag.get('dir') not in ('ltr', 'rtl', 'auto'):
             tag.attrs.pop('dir', None)
         if tag.name == 'img':
@@ -189,6 +194,9 @@ class SourceContext:
 
 def dictionary_content(name, word, number, ctx):
     encoded = quote(word, safe='')
+    if name in ('bokmalsordboka', 'nynorskordboka'):
+        from ordbokene_scraper import ordbokene_content
+        return block(name, ordbokene_content(word, 'bm' if name == 'bokmalsordboka' else 'nn', ctx))
     if name == 'oxford':
         from oxford_scraper import oxford_content
         return block(name, oxford_content(word, ctx))

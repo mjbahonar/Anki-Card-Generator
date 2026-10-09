@@ -98,8 +98,8 @@ def load_config(path):
             raise ConfigError(f'language.{key} must be a language code such as no, en or fa')
     if data['audio']['english_accent'] not in ['us', 'uk']:
         raise ConfigError('audio.english_accent must be us or uk')
-    if data['anki']['model_id'] in [1559328410, 1559328412, 1559328440]:
-        raise ConfigError('The Oxford schema needs a new model_id (1559328450); do not reuse V3/V4 model IDs.')
+    if data['anki']['model_id'] in [1559328410, 1559328412, 1559328440, 1559328450]:
+        raise ConfigError('The final V5 schema needs a new model_id (1559328451); do not reuse V3/V4/draft V5 IDs.')
     priority = data['audio']['priority']
     if not isinstance(priority, list) or any(item not in ['lexin', 'fastdic', 'google_tts'] for item in priority):
         raise ConfigError('audio.priority supports lexin, fastdic and google_tts')

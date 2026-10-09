@@ -21,8 +21,8 @@ autosave_every = 5             # Recovery CSV; 0 disables autosave
 
 [anki]
 deck_name = "My Vocabulary"
-deck_id = 2059400450           # New Oxford schema deck; keep fixed after the first import
-model_id = 1559328450          # Do not reuse a V3/V4 model ID
+deck_id = 2059400451           # Final V5 schema; keep fixed after the first import
+model_id = 1559328451          # Do not reuse a V3/V4 or draft V5 model ID
 # Give a separate deck a separate deck_id. English and Norwegian share the unified model.
 
 [style]
@@ -57,6 +57,12 @@ url = "https://github.com/mjbahonar/Anki-Card-Generator"
 # Sources that do not support the chosen language are skipped automatically.
 [sources.lexin]
 enabled = true                # Norwegian -> English; includes inflection tables
+
+[sources.bokmalsordboka]
+enabled = true                # Bokmål definitions and inflection
+
+[sources.nynorskordboka]
+enabled = true                # Nynorsk definitions and inflection
 
 [sources.google_translate]
 enabled = true                # Uses language.source and translation_target

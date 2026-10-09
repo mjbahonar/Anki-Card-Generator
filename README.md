@@ -1,8 +1,10 @@
-# Anki Card Generator — v5.0.0 (unreleased)
+# Anki Card Generator — v5.0.0
+
+Norwegian sources now include `[sources.bokmalsordboka]` and `[sources.nynorskordboka]`, separately enabled by default. Both include exact headword articles, expanded inflection tables and original bold/italic emphasis. Nynorsk content uses Nynorsk spelling and may differ from a Bokmål input word; a missing exact entry is reported normally. Info remains last. V5 draft model `1559328450` must also be replaced by the final model `1559328451`.
 
 Oxford is enabled for English in `[sources.oxford]`; `examples_per_definition = 3` limits examples for each main definition. It follows exact same-word entry links to collect all available parts of speech, without including compounds. It uses direct HTML requests and downloads no Oxford audio. Fastdic/Google TTS remain the audio providers.
 
-**V5 migration:** adding Oxford changes the fixed Anki schema. Defaults now use model `1559328450` and deck `2059400450`. Import into this new deck; do not reuse a V4 model ID or expect automatic migration of review history. Existing V4 decks remain available. Keep the new IDs fixed after the first V5 import, regardless of source toggles.
+**V5 migration:** adding Oxford changes the fixed Anki schema. Defaults now use model `1559328451` and deck `2059400451`. Import into this new deck; do not reuse a V4 model ID or expect automatic migration of review history. Existing V4 decks remain available. Keep the new IDs fixed after the first V5 import, regardless of source toggles.
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
@@ -85,6 +87,8 @@ Edit the existing sections rather than adding duplicate TOML sections. Dictionar
 | `fastdic`, `faraazin`, `b_amooz` | English | Persian meanings |
 | `dictionary_com`, `cambridge` | English | English definitions |
 | `oxford` | English | Oxford Learner's main definitions and examples; no Oxford audio |
+| `bokmalsordboka` | Norwegian | Bokmål articles and expanded inflection tables |
+| `nynorskordboka` | Norwegian | Nynorsk articles and expanded inflection tables |
 | `thesaurus` | English | Synonyms / antonyms |
 | `google_dictionary` | English | Google's dictionary result |
 | `images` | Configurable | Downloaded image results; `count` controls the limit |

@@ -44,6 +44,17 @@
 }
 .source-content img { max-width: 100%; height: auto; border-radius: 8px; }
 .source-content .image-result { margin: 12px 0 20px; }
+.ordbokene-content .inflection-wrapper { overflow-x: auto; margin: 14px 0 20px; }
+.ordbokene-content table { width: 100%; min-width: 440px; text-align: left; }
+.ordbokene-content caption { text-align: left; font-weight: 700; padding-bottom: 8px; }
+.ordbokene-content th { background: rgba(127,127,127,.1); }
+.ordbokene-content .comma + .comma::before { content: ", "; }
+.ordbokene-content h3 { margin: 8px 0; }
+.ordbokene-content h4 { margin: 20px 0 8px; }
+.ordbokene-content .definition { margin: 12px 0; }
+.ordbokene-content .examples { color: #5f6368; margin: 8px 0 14px; }
+.ordbokene-entry + .ordbokene-entry { margin-top: 24px; border-top: 2px solid #bdd4e9; padding-top: 16px; }
+.nightMode .ordbokene-content .examples, :root[data-theme='dark'] .ordbokene-content .examples { color: #bbbbbb; }
 .source-content .image-credit { font-size: .72em; line-height: 1.5; overflow-wrap: anywhere; color: #5f6368; }
 .nightMode .source-content .image-credit, :root[data-theme='dark'] .source-content .image-credit { color: #bbbbbb; }
 .source-content table { border-collapse: collapse; max-width: 100%; }

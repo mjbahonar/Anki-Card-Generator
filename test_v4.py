@@ -24,6 +24,21 @@ ROOT = Path(__file__).resolve().parent
 
 
 class V4Tests(unittest.TestCase):
+    def test_ordbokene_exact_homographs_emphasis_and_inflection(self):
+        from ordbokene_scraper import exact_article, render_article
+        markup = '''<div class="article-title"><h3>bok<span class="hgno"><span class="sr-only">1</span>I</span></h3>
+          <div class="subheader">noun <em>feminine</em></div></div><button>Inflection</button>
+          <table class="infl-table"><caption>Inflection</caption><thead><tr><th colspan="2">singular</th></tr></thead>
+          <tbody><tr><td rowspan="2"><strong>boka</strong></td><td>bøker</td></tr></tbody></table>
+          <section class="expressions"><strong>fullt hus</strong><em>example</em></section><div role="toolbar">Copy link</div>'''
+        self.assertTrue(exact_article(markup, 'bok'))
+        self.assertFalse(exact_article(markup, 'bokhandel'))
+        result = clean_html(render_article(markup))
+        for expected in ['<strong>boka</strong>', '<strong>fullt hus</strong>', '<em>example</em>', 'colspan="2"', 'rowspan="2"', 'inflection-wrapper']:
+            self.assertIn(expected, result)
+        self.assertNotIn('Copy link', result)
+        self.assertNotIn('<button', result)
+
     def test_image_fallback_persists_media_and_credits(self):
         from io import BytesIO
         from PIL import Image
@@ -79,7 +94,7 @@ class V4Tests(unittest.TestCase):
     def test_oxford_schema_rejects_old_model_id(self):
         text = (ROOT / 'config.toml').read_text(encoding='utf-8')
         path = self.directory / 'old_model.toml'
-        path.write_text(text.replace('model_id = 1559328450', 'model_id = 1559328440'), encoding='utf-8')
+        path.write_text(text.replace('model_id = 1559328451', 'model_id = 1559328440'), encoding='utf-8')
         with self.assertRaisesRegex(ConfigError, 'new model_id'):
             load_config(path)
 
@@ -127,7 +142,7 @@ class V4Tests(unittest.TestCase):
         path = self.directory / 'invalid.toml'
         for old, new, message in [('timeout_seconds = 20', 'timeout_seconds = nan', 'timeout_seconds'),
                                   ('word_delay_seconds = 0.5', 'word_delay_seconds = inf', 'word_delay_seconds'),
-                                  ('deck_id = 2059400450', 'deck_id = 9223372036854775808', 'SQLite')]:
+                                  ('deck_id = 2059400451', 'deck_id = 9223372036854775808', 'SQLite')]:
             with self.subTest(message=message):
                 path.write_text(text.replace(old, new), encoding='utf-8')
                 with self.assertRaisesRegex(ConfigError, message):
