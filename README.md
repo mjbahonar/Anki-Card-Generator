@@ -77,7 +77,7 @@ Edit the existing sections rather than adding duplicate TOML sections. Dictionar
 
 | Source | Supported input | Content |
 | --- | --- | --- |
-| `lexin` | Norwegian | First exact Bokmål headword: explanations, inflections, examples, idioms and compounds |
+| `lexin` | Norwegian | First exact Bokmål/Nynorsk headword: explanations, inflections, examples, idioms and compounds |
 | `google_translate` | Configurable | Translation to `language.translation_target` |
 | `dict_com` | Norwegian / English | Translations and phrases in the other language |
 | `fastdic`, `faraazin`, `b_amooz` | English | Persian meanings |
@@ -147,3 +147,5 @@ Each word shows `OK`, `EMPTY` or `FAIL` for each source, its elapsed time and au
 | Browser unavailable | Run `python -m playwright install chromium` in the same Python environment |
 | Wrong words or input error | `input.file`, `sheet`, `header` and `word_column`; run `python main.py --check` |
 | A source stops returning content | The site's availability or changed markup; other sources can still complete |
+
+Lexin supports `variant = "bokmal"`, `"nynorsk"` or `"both"` in `[sources.lexin]`. With no variant, `nn` input uses Nynorsk and other Norwegian input uses Bokmål. Both entries share the existing Lexin field, preserving the Anki schema and note identity. Audio follows the input variety (or Nynorsk when explicitly selected).

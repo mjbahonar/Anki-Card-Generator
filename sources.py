@@ -24,7 +24,7 @@ class SourceSpec:
 
 # This order defines the permanent V4 Anki schema, independent of enabled/order settings.
 SOURCE_SPECS = {
-    'lexin': SourceSpec('Lexin · Bokmål–English', ('no', 'nb')),
+    'lexin': SourceSpec('Lexin · Norwegian–English', ('no', 'nb', 'nn')),
     'google_translate': SourceSpec('Google Translate'),
     'dict_com': SourceSpec('Dict.com', ('no', 'nb', 'en')),
     'fastdic': SourceSpec('Fastdic', ('en',), True),
@@ -170,6 +170,8 @@ class SourceContext:
         if len(data) < 128 or not (data.startswith(b'ID3') or (data[0] == 255 and data[1] & 224 == 224)):
             raise ValueError('Response is not a valid MP3')
         language = 'no' if self.language == 'nb' else self.language
+        if provider == 'lexin' and self.config.section('sources').get('lexin', {}).get('variant') == 'nynorsk':
+            language = 'nn'
         path = self.audio_dir / audio_filename(word, provider, language)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
@@ -190,6 +192,8 @@ class SourceContext:
 
     def cached_audio(self, word, provider):
         language = 'no' if self.language == 'nb' else self.language
+        if provider == 'lexin' and self.config.section('sources').get('lexin', {}).get('variant') == 'nynorsk':
+            language = 'nn'
         path = self.audio_dir / audio_filename(word, provider, language)
         if self.config.section('audio')['cache'] and path.is_file():
             data = path.read_bytes()
@@ -201,12 +205,21 @@ class SourceContext:
         if audio:
             self.lexin_audio_attempted.add(word)
         cached = self.cached_audio(word, 'lexin') if audio else ''
-        with self.page() as page:
-            content, sound = scrape_and_process_lexin(
-                word, number, page, download_audio=audio and not bool(cached),
-                audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout,
-                verbose=False, on_error=lambda source, error: self.issue(word, source, error),
-                remaining_timeout=lambda: self.timeout)
+        variant = self.config.section('sources').get('lexin', {}).get(
+            'variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
+        variants = ('bokmal', 'nynorsk') if variant == 'both' else (variant,)
+        primary = 'nynorsk' if self.language == 'nn' or variant == 'nynorsk' else 'bokmal'
+        contents, sound = [], ''
+        for selected in variants:
+            with self.page() as page:
+                content, selected_sound = scrape_and_process_lexin(
+                    word, number, page, download_audio=audio and selected == primary and not bool(cached),
+                    audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout,
+                    verbose=False, on_error=lambda source, error: self.issue(word, source, error),
+                    remaining_timeout=lambda: self.timeout, variant=selected)
+            contents.append(content)
+            sound = selected_sound or sound
+        content = ''.join(contents)
         if sound:
             sound = self.register_audio(self.audio_dir / sound[7:-1])
         self.lexin_results[word] = (content, cached or sound)
@@ -340,7 +353,7 @@ def select_audio(word, number, ctx):
     if not ctx.config.section('audio')['enabled']:
         return ''
     for provider in ctx.config.section('audio')['priority']:
-        if provider == 'lexin' and ctx.language not in ['no', 'nb']:
+        if provider == 'lexin' and ctx.language not in ['no', 'nb', 'nn']:
             continue
         if provider == 'fastdic' and ctx.language != 'en':
             continue

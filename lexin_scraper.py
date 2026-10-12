@@ -1,4 +1,4 @@
-"""Exact Bokmål entries and their headword pronunciation from Lexin."""
+"""Exact Bokmål/Nynorsk entries and their headword pronunciation from Lexin."""
 
 import hashlib
 import os
@@ -22,7 +22,7 @@ def audio_filename(word, provider, language='no'):
     return f"{provider}_{language}_{stem}_{digest}.mp3"
 
 
-def render_lexin_entry(entry_html):
+def render_lexin_entry(entry_html, variant='bokmal'):
     """Keep the full entry, including inflection, without site controls or scripts."""
     soup = BeautifulSoup(entry_html, 'html.parser')
     for node in soup.select('.tts-btn, .ordbank-table.mobile, summary, script, style, iframe, img, audio, button'):
@@ -40,7 +40,8 @@ def render_lexin_entry(entry_html):
             continue
         node.attrs = {key: value for key, value in node.attrs.items()
                       if key in {'class', 'lang', 'colspan', 'rowspan'}}
-    return ('<div class="gt-container lexin-container"><div class="gt-title">Lexin · Bokmål–English</div>'
+    title = 'Nynorsk' if variant == 'nynorsk' else 'Bokmål'
+    return (f'<div class="gt-container lexin-container"><div class="gt-title">Lexin · {title}–English</div>'
             '<hr class="gt-separator"><div class="lexin-content"><ul class="search-table">'
             + str(soup) + '</ul></div></div>')
 
@@ -55,14 +56,14 @@ def choose_norwegian_audio(word, word_number, lexin_sound, google_tts):
     return ''
 
 
-def save_lexin_audio(response, word, audio_directory=None, copy_to=None):
+def save_lexin_audio(response, word, audio_directory=None, copy_to=None, language='no'):
     if not response.ok:
         raise ValueError(f'Pronunciation HTTP {response.status}')
     data = response.body()
     if len(data) < 128 or not (data.startswith(b'ID3') or
                              (data[0] == 0xff and data[1] & 0xe0 == 0xe0)):
         raise ValueError('Pronunciation response is not an MP3')
-    filename = audio_filename(word, 'lexin')
+    filename = audio_filename(word, 'lexin', language)
     audio_dir = Path(audio_directory) if audio_directory else Path(__file__).resolve().parent / 'Audio'
     audio_dir.mkdir(parents=True, exist_ok=True)
     local_path = audio_dir / filename
@@ -81,7 +82,7 @@ def save_lexin_audio(response, word, audio_directory=None, copy_to=None):
 
 def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
-                             verbose=True, on_error=None, remaining_timeout=None):
+                             verbose=True, on_error=None, remaining_timeout=None, variant='bokmal'):
     """Return (full first exact entry HTML, sound tag); audio failure keeps the entry."""
     def log(message):
         if verbose:
@@ -90,19 +91,23 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
     def timeout_ms():
         return (remaining_timeout() if remaining_timeout else timeout_seconds) * 1000
 
+    if variant not in ('bokmal', 'nynorsk'):
+        raise ValueError('Lexin variant must be bokmal or nynorsk')
+    language = 'nn' if variant == 'nynorsk' else 'nb'
+    lemma_selector = f'dd[data-type="LEM"][lang="{language}"]'
     log(f'[LEXIN] ({word_number}) {word}')
     entry_html = ''
     sound_tag = ''
     try:
-        page.goto('https://lexin.oslomet.no/#/findwords/message.bokmal-english?q=' + quote(str(word), safe=''),
+        page.goto(f'https://lexin.oslomet.no/#/findwords/message.{variant}-english?q=' + quote(str(word), safe=''),
                   wait_until='domcontentloaded', timeout=timeout_ms())
-        page.locator('.search-table dd[data-type="LEM"][lang="nb"]').first.wait_for(timeout=timeout_ms())
+        page.locator('.search-table ' + lemma_selector).first.wait_for(timeout=timeout_ms())
         entries = page.locator('ul.search-table')
         entry = None
         for index in range(entries.count()):
             page.set_default_timeout(timeout_ms())
             candidate = entries.nth(index)
-            lemmas = candidate.locator('dd[data-type="LEM"][lang="nb"]')
+            lemmas = candidate.locator(lemma_selector)
             if not lemmas.count():
                 continue
             lemma = lemmas.first
@@ -114,10 +119,10 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
         if entry is None:
             log(f'[LEXIN] No exact headword for {word!r}')
             return '', ''
-        entry_html = render_lexin_entry(entry.inner_html())
+        entry_html = render_lexin_entry(entry.inner_html(), variant)
         if not download_audio:
             return entry_html, ''
-        lemma = entry.locator('dd[data-type="LEM"][lang="nb"]').first
+        lemma = entry.locator(lemma_selector).first
         forms = lemma.locator('.grunnform')
         button = lemma.locator('.tts-btn').first
         for index in range(forms.count()):
@@ -129,7 +134,8 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
             with page.expect_response(lambda r: '.mp3' in r.url.lower() and 'leseweb.dk/' in r.url,
                                       timeout=timeout_ms()) as pending:
                 button.click(timeout=min(5000, timeout_ms()))
-            sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to)
+            sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to,
+                                         'nn' if variant == 'nynorsk' else 'no')
         except Exception as exc:
             if on_error:
                 on_error('lexin_audio', exc)

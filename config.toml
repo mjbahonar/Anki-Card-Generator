@@ -3,7 +3,7 @@
 
 [language]
 source = "no"                  # no = Norwegian, en = English
-translation_target = "fa"      # fa = Persian, en = English, etc.
+translation_target = "en"      # fa = Persian, en = English, etc.
 
 [input]
 file = "New Words.xlsx"
@@ -57,13 +57,14 @@ url = "https://github.com/mjbahonar/Anki-Card-Generator"
 # Set enabled = false to hide a source. Fields in Anki stay stable automatically.
 # Sources that do not support the chosen language are skipped automatically.
 [sources.lexin]
+variant = "both"              # bokmal, nynorsk, or both; shared stable Anki field
 enabled = true                # Norwegian -> English; includes inflection tables
 
 [sources.bokmalsordboka]
 enabled = true                # Bokmål definitions and inflection
 
 [sources.nynorskordboka]
-enabled = true                # Nynorsk definitions and inflection
+enabled = false                # Nynorsk definitions and inflection
 
 [sources.google_translate]
 enabled = true                # Uses language.source and translation_target
@@ -95,10 +96,10 @@ enabled = false               # English definitions
 examples_per_definition = 3
 
 [sources.images]
-enabled = false               # Vocabulary images, with provider fallback
-count = 3
+enabled = true               # Vocabulary images, with provider fallback
+count = 2
 priority = ["google", "commons"] # Use ["commons"] to skip Google
 
 [sources.oxford]
-enabled = true                # English definitions; audio still uses audio.priority
+enabled = false                # English definitions; audio still uses audio.priority
 examples_per_definition = 3

@@ -116,10 +116,13 @@ def load_config(path):
             raise ConfigError(f'Unknown source: {name}. Available: {", ".join(SOURCE_SPECS)}')
         if not isinstance(settings, dict) or type(settings.get('enabled')) is not bool:
             raise ConfigError(f'sources.{name}.enabled must be true or false')
-        allowed = ({'enabled', 'count', 'priority'} if name == 'images' else
+        allowed = ({'enabled', 'variant'} if name == 'lexin' else
+                   {'enabled', 'count', 'priority'} if name == 'images' else
                    {'enabled', 'examples_per_definition'} if name in ['fastdic', 'cambridge', 'oxford'] else {'enabled'})
         if set(settings) - allowed:
             raise ConfigError(f'Unknown option in sources.{name}')
+        if name == 'lexin' and settings.get('variant', 'bokmal') not in ('bokmal', 'nynorsk', 'both'):
+            raise ConfigError('sources.lexin.variant must be bokmal, nynorsk or both')
         if name == 'images' and (type(settings.get('count', 3)) is not int or not 1 <= settings.get('count', 3) <= 10):
             raise ConfigError('sources.images.count must be between 1 and 10')
         if name == 'images':

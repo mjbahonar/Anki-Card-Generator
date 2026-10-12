@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from lexin_scraper import (normalize_headword, render_lexin_entry,
-                           save_lexin_audio, choose_norwegian_audio, audio_filename)
+                           save_lexin_audio, choose_norwegian_audio, audio_filename, scrape_and_process_lexin)
 
 
 class LexinTests(unittest.TestCase):
@@ -25,6 +25,23 @@ class LexinTests(unittest.TestCase):
         self.assertNotIn('onclick', output)
         self.assertNotIn('<script', output)
         self.assertNotIn('tts-btn', output)
+
+    def test_nynorsk_uses_nn_lemma_and_correct_route(self):
+        page = Mock()
+        entries = page.locator.return_value
+        entries.count.return_value = 1
+        candidate = entries.nth.return_value
+        lemma = candidate.locator.return_value
+        lemma.count.return_value = 1
+        lemma.first.locator.return_value.count.return_value = 1
+        lemma.first.locator.return_value.all_text_contents.return_value = ['hus']
+        candidate.inner_html.return_value = '<li><dd lang="nn">hus</dd></li>'
+        content, sound = scrape_and_process_lexin(
+            'hus', 1, page, variant='nynorsk', download_audio=False, verbose=False)
+        self.assertIn('message.nynorsk-english?q=hus', page.goto.call_args.args[0])
+        candidate.locator.assert_called_with('dd[data-type="LEM"][lang="nn"]')
+        self.assertIn('Lexin · Nynorsk–English', content)
+        self.assertEqual(sound, '')
 
     def test_html_error_is_not_saved_as_audio(self):
         response = Mock(ok=True)
