@@ -181,6 +181,9 @@ Multi-blank `gap` exercises stay on one card. Put each answer on its own line in
 
 Gap fronts now have one editable input per blank (including Preview); grading remains manual for the entire exercise. The native `type` comparison input appears during actual Anki review, not in Anki’s Preview dialog. Re-run and import the new APKG to update existing templates/content.
 
+**AnkiDroid keyboard:** If tapping a gap input focuses it but does not open the keyboard, enable **Settings → Advanced → Workarounds → Type answer into the card**, then leave and reopen the review screen. This setting resolved the issue on a tested Android device. The option's location/name may vary by AnkiDroid version. See the [AnkiDroid manual](https://docs.ankidroid.org/#_workarounds).
+
+
 Set `[sources.lexin] table_audio = true` to include pronunciation controls only for inflection-table forms in the exact Lexin entry. The global audio switch also applies. Files are cached and bundled; table controls do not autoplay. Set it to false for text-only tables. Additional network work shares the source time budget; increase it for large tables. Example/idiom pronunciation is excluded.
 
 Lexin table pronunciation prefers the original Lexin audio, with a short per-control wait and gTTS fallback if it is unavailable. These controls never play all forms automatically. The `type` template uses only one native comparison, inherited on the back through FrontSide.
