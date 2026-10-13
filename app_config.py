@@ -33,6 +33,12 @@ def load_config(path):
             data = tomllib.load(stream)
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ConfigError(f'Cannot read {path}: {exc}') from exc
+    # Accept old audio.copy_to configurations without requiring the legacy key in new files.
+    if isinstance(data.get('audio'), dict):
+        data['audio'].setdefault('copy_to', '')
+    media = data.get('media', {})
+    if not isinstance(media, dict) or set(media) - {'anki_directory'} or not isinstance(media.get('anki_directory', ''), str):
+        raise ConfigError('media.anki_directory must be a path string')
     required = {
         'language': ['source', 'translation_target'],
         'input': ['file', 'sheet', 'header', 'word_column', 'deduplicate', 'max_words'],
@@ -49,11 +55,16 @@ def load_config(path):
         for key in keys:
             if key not in data[section]:
                 raise ConfigError(f'Missing {section}.{key}')
-        optional = {'source_timeout_seconds'} if section == 'runtime' else set()
+        optional = ({'source_timeout_seconds'} if section == 'runtime' else
+                    {'order'} if section == 'input' else set())
         if section != 'sources' and set(data[section]) - set(keys) - optional:
             raise ConfigError(f'Unknown setting in [{section}]: {set(data[section]) - set(keys) - optional}')
-    if set(data) - set(required):
+    if set(data) - set(required) - {'practice', 'cards', 'media'}:
         raise ConfigError(f'Unknown configuration section: {set(data) - set(required)}')
+    from exercises import validate_cards
+    validate_cards(data)
+    if data['input'].get('order', 'excel') not in ('excel', 'random'):
+        raise ConfigError('input.order must be excel or random')
     for section, keys in {
         'input': ['header', 'deduplicate'], 'audio': ['enabled', 'cache'],
         'runtime': ['keep_awake', 'headless'], 'info': ['enabled'],
@@ -98,6 +109,7 @@ def load_config(path):
     if not re.fullmatch(r'[A-Za-z0-9_-]+', data['output']['filename_prefix']):
         raise ConfigError('output.filename_prefix may contain letters, digits, underscores and hyphens')
     for key in ['source', 'translation_target']:
+        data['language'][key] = data['language'][key].lower()
         if not re.fullmatch(r'[a-z]{2,3}(?:-[A-Za-z]{2,4})?', data['language'][key]):
             raise ConfigError(f'language.{key} must be a language code such as no, en or fa')
     if data['audio']['english_accent'] not in ['us', 'uk']:
@@ -116,13 +128,15 @@ def load_config(path):
             raise ConfigError(f'Unknown source: {name}. Available: {", ".join(SOURCE_SPECS)}')
         if not isinstance(settings, dict) or type(settings.get('enabled')) is not bool:
             raise ConfigError(f'sources.{name}.enabled must be true or false')
-        allowed = ({'enabled', 'variant'} if name == 'lexin' else
+        allowed = ({'enabled', 'variant', 'table_audio'} if name == 'lexin' else
                    {'enabled', 'count', 'priority'} if name == 'images' else
                    {'enabled', 'examples_per_definition'} if name in ['fastdic', 'cambridge', 'oxford'] else {'enabled'})
         if set(settings) - allowed:
             raise ConfigError(f'Unknown option in sources.{name}')
         if name == 'lexin' and settings.get('variant', 'bokmal') not in ('bokmal', 'nynorsk', 'both'):
             raise ConfigError('sources.lexin.variant must be bokmal, nynorsk or both')
+        if name == 'lexin' and type(settings.get('table_audio', False)) is not bool:
+            raise ConfigError('sources.lexin.table_audio must be true or false')
         if name == 'images' and (type(settings.get('count', 3)) is not int or not 1 <= settings.get('count', 3) <= 10):
             raise ConfigError('sources.images.count must be between 1 and 10')
         if name == 'images':

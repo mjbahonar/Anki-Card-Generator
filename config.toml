@@ -1,76 +1,69 @@
-# Edit this file, then run: python main.py
-# All relative paths are resolved from this file's directory.
+# ANKI CARD GENERATOR — edit this file, then run: python main.py
+# Relative paths start from the folder containing this file.
+# Quick map: 01 Languages | 02 Excel | 03 Sources | 04 Card types
+#            05 Audio | 06 Output/deck | 07 Appearance/Info | 08 Runtime
 
+# SHARED ANKI MEDIA DESTINATION (audio and images)
+# Local originals are always retained. Blank disables copying to Anki.
+# Example: C:/Users/YourName/AppData/Roaming/Anki2/User 1/collection.media
+[media]
+anki_directory = ""
+
+# ======================================================================
+# 01. LANGUAGES
+# ======================================================================
+# Vocabulary: Norwegian input -> English dictionary meanings.
 [language]
-source = "no"                  # no = Norwegian, en = English
-translation_target = "en"      # fa = Persian, en = English, etc.
+source = "no"                  # no = Norwegian; en = English; fa = Persian
+translation_target = "en"      # Used by translation sources when enabled
 
+# Exercises: English prompts -> Norwegian (Bokmål) answers.
+# This pair is independent of the vocabulary dictionary direction above.
+[practice]
+question_language = "en"
+answer_language = "nb"         # nb = Bokmål; nn = Nynorsk; en = English; fa = Persian
+model_id_base = 1559328500       # Keep fixed after the first exercise import
+# Optional custom display names: [practice.language_names]
+# xx = "Language name"
+
+# ======================================================================
+# 02. EXCEL INPUT
+# ======================================================================
+# Adjacent columns: Input | Type | Tags | Answer
+# Blank/missing Type = normal. Tags/Answer are optional for normal cards.
+# Without a header: header = false, word_column = 0.
+# With a header: header = true, word_column = 0 (or the first header name).
 [input]
-file = "New Words.xlsx"
-sheet = 0                     # First sheet, or its name: "Sheet1"
-header = false                # true if the first row contains column names
-word_column = 0               # Zero-based column index, or a header name
+file = "New Words.xlsx"         # Your workbook; example template is supplied separately
+sheet = 0                      # First worksheet, or its name
+header = false                 # Set true ONLY when row 1 contains column names
+word_column = 0                # First input column; zero-based index
 deduplicate = true
-max_words = 0                 # 0 = all words; use 3 for a small trial
+order = "excel"                # excel = worksheet order; random = shuffle on each run
+max_words = 0                  # 0 = all valid records
 
-[output]
-directory = "Output"
-formats = ["xlsx", "csv", "apkg", "html", "json"]
-filename_prefix = "words"
-autosave_every = 5             # Recovery CSV; 0 disables autosave
-
-[anki]
-deck_name = "My Vocabulary"
-deck_id = 2059400451           # Final V5 schema; keep fixed after the first import
-model_id = 1559328451          # Do not reuse a V3/V4 or draft V5 model ID
-# Give a separate deck a separate deck_id. English and Norwegian share the unified model.
-
-[style]
-file = "Styles/cards.css"      # Current V3.6N look, shared by every language
-
-[audio]
-enabled = true
-priority = ["lexin", "fastdic", "google_tts"]
-directory = "Audio"
-copy_to = ""                  # Optional absolute Anki collection.media path
-cache = true
-english_accent = "us"         # us or uk (Fastdic)
-# Only the input headword's sound is downloaded, not inflection/example audio.
-
-[runtime]
-timeout_seconds = 30
-source_timeout_seconds = 30    # Total network-work budget per word/source; 0 disables
-translation_attempts = 2
-retry_delay_seconds = 4
-word_delay_seconds = 0.5
-keep_awake = true
-headless = true
-
-[info]
-enabled = true
-title = "About this deck"
-text = "Created with Anki Card Generator. Build your own vocabulary deck from a simple word list."
-link_text = "Create your own deck"
-url = "https://github.com/mjbahonar/Anki-Card-Generator"
-
-# Sources are displayed in this order. Reorder these sections to change the cards.
-# Set enabled = false to hide a source. Fields in Anki stay stable automatically.
-# Sources that do not support the chosen language are skipped automatically.
+# ======================================================================
+# 03. DICTIONARY SOURCES
+# ======================================================================
+# Only Lexin is enabled. Other dictionaries, translation and images are off.
+# Dictionary sources are used for normal vocabulary cards only.
 [sources.lexin]
-variant = "both"              # bokmal, nynorsk, or both; shared stable Anki field
-enabled = true                # Norwegian -> English; includes inflection tables
+enabled = true
+variant = "bokmal"             # bokmal, nynorsk or both
+table_audio = true             # Inflection-table pronunciation only; click to play
 
+# Additional sources: set enabled = true to use one; sections define display order.
 [sources.bokmalsordboka]
-enabled = true                # Bokmål definitions and inflection
+enabled = false                # Bokmål definitions and inflection
 
 [sources.nynorskordboka]
 enabled = false                # Nynorsk definitions and inflection
 
 [sources.google_translate]
-enabled = true                # Uses language.source and translation_target
+enabled = false                # Uses language.source and translation_target
 
 [sources.dict_com]
-enabled = true                # Norwegian <-> English
+enabled = false                # Norwegian <-> English
 
 [sources.fastdic]
 enabled = false               # English -> Persian
@@ -96,10 +89,106 @@ enabled = false               # English definitions
 examples_per_definition = 3
 
 [sources.images]
-enabled = true               # Vocabulary images, with provider fallback
+enabled = false               # Vocabulary images, with provider fallback
 count = 2
 priority = ["google", "commons"] # Use ["commons"] to skip Google
 
 [sources.oxford]
 enabled = false                # English definitions; audio still uses audio.priority
 examples_per_definition = 3
+
+# ======================================================================
+# 04. CARD TYPES
+# ======================================================================
+# Valid Excel Type values: normal (or blank), type, sentence, gap, listen.
+# Every card receives its type's tag automatically; Excel tags are additional.
+# Instructions are English. {answer_language} inserts the configured language name.
+# Supported placeholders: {question_language}, {answer_language}
+# audio switches apply together with [audio].enabled.
+
+[cards.normal]                 # Dictionary headword; Answer may be blank
+title = ""                    # Blank keeps the original front appearance
+instruction = ""
+tag = "normal"
+audio = true
+
+[cards.type]                   # Meaning/prompt -> typed answer; Answer REQUIRED
+title = "Spelling practice"
+instruction = "Write the equivalent in {answer_language}."
+tag = "type"
+audio = true                   # Pronunciation on the back only
+
+[cards.sentence]               # Prompt sentence -> spoken translation; Answer REQUIRED
+title = "Speaking practice"
+instruction = "Say this sentence in {answer_language}."
+tag = "sentence"
+audio = true                   # Sample answer on the back
+
+[cards.gap]                    # Input contains […] or [...]; Answer REQUIRED
+# Multiple blanks stay on one card. Write one answer per line, in blank order.
+# A count mismatch or empty answer line skips the row with a report.
+title = "Fill in the blank"
+instruction = "Complete the sentence in {answer_language}."
+tag = "gap"
+audio = false                   # Completed sentence on the back
+
+[cards.listen]                 # Norwegian sentence in Input; English meaning optional
+title = "Listening practice"
+instruction = "Listen and repeat in {answer_language}."
+tag = "listen"
+audio = true                   # Front audio; no audio -> skip this card
+
+# ======================================================================
+# 05. AUDIO
+# ======================================================================
+# Normal cards: Lexin headword audio, then gTTS if unavailable.
+# Exercise cards: gTTS in practice.answer_language.
+# nb/nn use generic Norwegian no for gTTS; no dedicated Nynorsk voice.
+# Automatic playback is controlled by Anki's review preferences.
+[audio]
+enabled = true
+priority = ["lexin", "google_tts"]
+directory = "Audio"
+cache = true
+english_accent = "us"          # Reserved for optional Fastdic audio
+
+# ======================================================================
+# 06. OUTPUT AND ANKI DECK
+# ======================================================================
+[output]
+directory = "Output"
+formats = ["xlsx", "csv", "apkg", "html", "json"]
+filename_prefix = "words"
+autosave_every = 5              # Recovery CSV after every 5 records; 0 disables
+
+[anki]
+deck_name = "My Vocabulary"
+deck_id = 2059400451            # Keep fixed after the first import
+model_id = 1559328451           # Existing vocabulary model; do not change
+# For a separate deck, use a separate deck_id and deck_name.
+
+# ======================================================================
+# 07. APPEARANCE AND INFO
+# ======================================================================
+[style]
+file = "Styles/cards.css"
+
+# English Info appears last on every card's back.
+[info]
+enabled = true
+title = "About this deck"
+text = "Created with Anki Card Generator. Build your own vocabulary deck from a simple word list."
+link_text = "Create your own deck"
+url = "https://github.com/mjbahonar/Anki-Card-Generator"
+
+# ======================================================================
+# 08. RUNTIME
+# ======================================================================
+[runtime]
+timeout_seconds = 30
+source_timeout_seconds = 30     # Total budget per source; 0 disables
+translation_attempts = 2        # Used only if a translation source is enabled
+retry_delay_seconds = 4
+word_delay_seconds = 0.5
+keep_awake = true
+headless = true

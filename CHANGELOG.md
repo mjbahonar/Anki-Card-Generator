@@ -1,5 +1,16 @@
 # Release notes
 
+## v5.2.0 — 2026-10-13
+
+- Added optional Excel type/tags/answer columns with normal, type, sentence, gap and listen cards. Blank type preserves the one-column vocabulary workflow. Automatic editable type tags and optional random generation order.
+- Added language-aware English instructions, per-type settings, Norwegian/Persian text direction, native spelling comparison and multi-blank exercises on one card with editable inputs and highlighted completed answers. Missing/invalid answers and unavailable listening audio are skipped and reported.
+- Added Lexin Bokmål/Nynorsk/both selection in the existing Lexin field. Optional inflection-table audio uses compact manual replay buttons, a local cache and gTTS fallback; example audio is excluded.
+- Added one shared Anki media destination for audio and images while keeping local originals. Legacy audio.copy_to configurations remain accepted. Distributed config leaves the personal media destination blank and retains every dictionary section.
+- Fixed Norwegian audio variant/cache selection, Nynorsk gTTS fallback, note-specific typing direction, multiline typing validation and exercise audio reporting/delays. Empty checks now fail when every row is invalid.
+- CSV exports include an Anki import companion for vocabulary-only and mixed decks, with the same GUIDs as APKG. Install the matching models via APKG before CSV import; CSV does not contain templates or media.
+- Compatibility: existing V5 vocabulary fields/model/GUIDs are unchanged. Four additive exercise models use stable independent IDs; no migration or major-version bump is required. Keep deck/model IDs fixed after import.
+- Validation: 61 automated tests, configuration validation and diff checks. Live public hus passed Bokmål with all five table pronunciations and Nynorsk with headword audio. Local browser checks cover LTR/RTL layout; native Anki Preview intentionally omits the type comparison box. Real AnkiDroid review was not tested. External dictionary availability and network budgets still apply.
+
 ## v5.1.0 — 2026-10-09
 
 - Added an optional per-word/source network budget (`runtime.source_timeout_seconds`, default 30; 0 disables). Share remaining time across requests, browser waits and translation retry delays; hide expired source results and continue with other sources. Individual request timeout (`runtime.timeout_seconds`) also defaults to 30 seconds. Audio requests use the individual request timeout separately.

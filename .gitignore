@@ -15,6 +15,7 @@
 /Audio
 /Images
 /Output
+/outputs
 /venv
 
 __pycache__/

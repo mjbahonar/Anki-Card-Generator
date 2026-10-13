@@ -26,7 +26,7 @@ python main.py --check
 python main.py
 ```
 
-Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings create a deck with Lexin first, Bokmålsordboka, Nynorskordboka, Google translation to Persian and Dict.com. Source failures are reported while available results are saved.
+Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings enable only Lexin Bokmål–English. All other source sections remain available with enabled = false. Source failures are reported while available results are saved.
 
 Generated files appear in `Output`. Start with `input.max_words = 3` for a small trial; set it to `0` to process the entire list.
 
@@ -149,3 +149,44 @@ Each word shows `OK`, `EMPTY` or `FAIL` for each source, its elapsed time and au
 | A source stops returning content | The site's availability or changed markup; other sources can still complete |
 
 Lexin supports `variant = "bokmal"`, `"nynorsk"` or `"both"` in `[sources.lexin]`. With no variant, `nn` input uses Nynorsk and other Norwegian input uses Bokmål. Both entries share the existing Lexin field, preserving the Anki schema and note identity. Audio follows the input variety (or Nynorsk when explicitly selected).
+
+
+### Mixed exercise cards
+
+Excel may contain four adjacent columns starting at `input.word_column`: **input | type | tags | answer**. Existing one-column workbooks continue to work; blank type means `normal`. Type names are case-insensitive. Comma-separated input tags are merged with the automatic type tag; whitespace within a tag becomes an underscore. Each `[cards.<type>]` section allows editing `title`, `instruction`, `tag`, and `audio`. Leave the normal title/instruction blank to retain the vocabulary front.
+
+| Type | Input | Answer column | Audio |
+| --- | --- | --- | --- |
+| `normal` or blank | Dictionary headword | Optional, unused | Existing vocabulary pronunciation; default Lexin then gTTS |
+| `type` | Meaning/prompt, e.g. house | Required: hus | Answer on back; native Anki typing comparison |
+| `sentence` | Prompt sentence | Required: sample translation | Sample answer on back; self-assessed speaking |
+| `gap` | Sentence containing `[…]` or `[...]` | Required: missing text | Completed sentence on back; recall then reveal |
+| `listen` | Sentence in the practised language | Optional: translation in question language | Front audio, hidden text; text and repeat audio on back |
+
+Unknown types, missing required answers, and gaps without the marker are skipped with Excel row numbers and a saved error report. Listening cards with disabled/failed audio are skipped. Blank optional columns never invalidate a normal card. Duplicate checking includes exercise type and language pair; answer edits keep exercise identity stable. First duplicate wins. Change the question/type/language pair to create a different exercise.
+
+`[practice]` sets `question_language` and `answer_language`, independently of dictionary `language.source`/`translation_target`. Codes such as EN/NO/FA are accepted. Instructions remain English; `{question_language}` and `{answer_language}` insert display names. Optional `[practice.language_names]` overrides names for other codes. Changing languages does not translate Excel content. Persian/Arabic/Hebrew/Urdu exercise text and the typing input use RTL, while English headings stay LTR.
+
+Exercise audio uses gTTS directly, with a language/text-specific cache and global plus per-type audio switches. For `nb`/`nn`, gTTS uses generic Norwegian `no`; there is no dedicated Nynorsk voice. Anki's review preferences control automatic playback. No microphone recording, speech recognition, translation generation, or automatic speaking grading is performed.
+
+**Anki compatibility:** the original V5 vocabulary model, fields, GUIDs and source ordering behavior are retained. Four separate additive models (`Vocabulary Exercise · type/sentence/gap/listen`) use IDs starting at `practice.model_id_base`; keep this base fixed after import. There is no migration of existing vocabulary notes and no existing model schema is replaced. All five types go in the same deck. New models are included when that type is present in APKG.
+
+The regular CSV/XLSX remain analysis exports. Every CSV export also writes `*_anki.csv`, with note-type/HTML/tag/GUID import headers and positional fields. Import the APKG first to install the matching exercise models; then import this companion CSV in Anki Desktop (2.1.54+) to update notes. Select the intended deck. Keep the GUID and identity fields unchanged to update the same notes as APKG. CSV does not carry templates, CSS or media; audio must be available in `collection.media` (APKG includes referenced media). Use APKG for the easiest complete import. HTML preview includes fronts and revealed answers; it is not a quiz.
+
+Validation: `python -m unittest test_v4 test_lexin_scraper test_exercises -v` and `python main.py --check`.
+
+Set `input.order = "excel"` (default) to preserve worksheet order, or `"random"` to shuffle complete records on each run before fetching/exporting. The workbook is unchanged and answers/tags stay with their questions. `max_words` selects the first valid records before shuffling. This controls generation order; Anki review order is configured separately in Anki.
+
+Multi-blank `gap` exercises stay on one card. Put each answer on its own line in the Answer cell, in blank order (Excel: Alt+Enter). Both […] and [...] markers can be mixed. Counts must match and answer lines must not be empty; otherwise the row is skipped with a report. The back shows the complete text with highlighted answers and preserved line breaks. Audio reads the completed text. Grade the entire exercise yourself. Commas are literal answer text, not separators.
+
+Gap fronts now have one editable input per blank (including Preview); grading remains manual for the entire exercise. The native `type` comparison input appears during actual Anki review, not in Anki’s Preview dialog. Re-run and import the new APKG to update existing templates/content.
+
+Set `[sources.lexin] table_audio = true` to include pronunciation controls only for inflection-table forms in the exact Lexin entry. The global audio switch also applies. Files are cached and bundled; table controls do not autoplay. Set it to false for text-only tables. Additional network work shares the source time budget; increase it for large tables. Example/idiom pronunciation is excluded.
+
+Lexin table pronunciation prefers the original Lexin audio, with a short per-control wait and gTTS fallback if it is unavailable. These controls never play all forms automatically. The `type` template uses only one native comparison, inherited on the back through FrontSide.
+
+Lexin table audio uses compact replay buttons rather than media-player bars, with no autoplay. Gap questions and completed answers align to the text direction (LTR left, RTL right); speaking answers omit the sample-answer notice.
+
+Shared media destination: set `[media] anki_directory = "C:/.../collection.media"` once near the top of config.toml. Audio and images keep their local originals and are copied there, including cached audio and table pronunciation. Blank disables external copying. Legacy audio.copy_to remains supported when the media section is absent. Use forward slashes in double-quoted TOML paths, or single quotes for literal Windows backslashes.
+
+Native typing accepts one answer line; multiline type answers are skipped with a reason. Typing direction is note-specific so importing another practice language does not change older cards. The exercise audio status and failures are shown in the console.

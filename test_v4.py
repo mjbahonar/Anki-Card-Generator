@@ -182,7 +182,7 @@ class V4Tests(unittest.TestCase):
         path = self.directory / 'invalid.toml'
         for old, new, message in [('timeout_seconds = 30', 'timeout_seconds = nan', 'timeout_seconds'),
                                   ('word_delay_seconds = 0.5', 'word_delay_seconds = inf', 'word_delay_seconds'),
-                                  ('deck_id = 2059400451', 'deck_id = 9223372036854775808', 'SQLite')]:
+                                  (f'deck_id = {tomllib.loads(text)["anki"]["deck_id"]}', 'deck_id = 9223372036854775808', 'SQLite')]:
             with self.subTest(message=message):
                 path.write_text(text.replace(old, new), encoding='utf-8')
                 with self.assertRaisesRegex(ConfigError, message):
@@ -259,6 +259,10 @@ class V4Tests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=ROOT / 'Output')
         self.directory = Path(self.temp.name)
         data = tomllib.loads((ROOT / 'config.toml').read_text(encoding='utf-8'))
+        # Integration fixtures must not depend on the user's enabled sources.
+        data['sources'] = {name: {'enabled': name in
+                           ('lexin', 'bokmalsordboka', 'google_translate', 'dict_com', 'images')}
+                           for name in SOURCE_SPECS}
         data['input']['file'] = str(self.directory / 'input.xlsx')
         data['output']['directory'] = str(self.directory)
         data['audio']['directory'] = str(self.directory / 'Audio')
@@ -360,7 +364,7 @@ class V4Tests(unittest.TestCase):
         self.addCleanup(context.close)
         paths, failures = export_outputs([{'Words': 'bok', 'FrontField': 'bok', 'Sound': ''}], self.config, 'only', context)
         self.assertFalse(failures)
-        self.assertEqual([p.suffix for p in paths], ['.csv'])
+        self.assertEqual([p.suffix for p in paths], ['.csv', '.csv'])
         self.assertFalse((self.directory / 'only.apkg').exists())
 
     def test_failed_source_does_not_stop_other_words(self):

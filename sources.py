@@ -166,20 +166,31 @@ class SourceContext:
             page.locator(selector).first.wait_for(timeout=self.timeout * 1000)
             return BeautifulSoup(page.content(), 'html.parser')
 
+    def audio_language(self, provider):
+        if provider == 'lexin':
+            variant = self.config.section('sources').get('lexin', {}).get(
+                'variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
+            return 'nn' if variant == 'nynorsk' or (variant == 'both' and self.language == 'nn') else 'no'
+        return 'no' if self.language == 'nb' or (provider == 'google_tts' and self.language == 'nn') else self.language
+
     def save_audio(self, word, provider, data):
         if len(data) < 128 or not (data.startswith(b'ID3') or (data[0] == 255 and data[1] & 224 == 224)):
             raise ValueError('Response is not a valid MP3')
-        language = 'no' if self.language == 'nb' else self.language
-        if provider == 'lexin' and self.config.section('sources').get('lexin', {}).get('variant') == 'nynorsk':
-            language = 'nn'
+        language = self.audio_language(provider)
         path = self.audio_dir / audio_filename(word, provider, language)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         return self.register_audio(path)
 
     def register_audio(self, path):
-        self.media.add(Path(path).resolve())
-        destination = self.config.section('audio')['copy_to']
+        self.register_media(path)
+        return f'[sound:{path.name}]'
+
+    def register_media(self, path):
+        path = Path(path).resolve()
+        self.media.add(path)
+        destination = self.config.data.get('media', {}).get('anki_directory',
+                      self.config.section('audio').get('copy_to', ''))
         if destination:
             try:
                 target = self.config.resolve(destination) / path.name
@@ -187,19 +198,21 @@ class SourceContext:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(path, target)
             except OSError as exc:
-                self.issue(path.name, 'audio_copy', exc)
-        return f'[sound:{path.name}]'
+                self.issue(path.name, 'media_copy', exc)
+        return path
 
     def cached_audio(self, word, provider):
-        language = 'no' if self.language == 'nb' else self.language
-        if provider == 'lexin' and self.config.section('sources').get('lexin', {}).get('variant') == 'nynorsk':
-            language = 'nn'
+        language = self.audio_language(provider)
         path = self.audio_dir / audio_filename(word, provider, language)
         if self.config.section('audio')['cache'] and path.is_file():
             data = path.read_bytes()
             if len(data) > 128 and (data.startswith(b'ID3') or (data[0] == 255 and data[1] & 224 == 224)):
                 return self.register_audio(path)
         return ''
+
+    def table_audio_fallback(self, form, language):
+        from exercises import exercise_audio
+        return exercise_audio(form, language, self)
 
     def lexin(self, word, number, audio=False):
         if audio:
@@ -208,7 +221,7 @@ class SourceContext:
         variant = self.config.section('sources').get('lexin', {}).get(
             'variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
         variants = ('bokmal', 'nynorsk') if variant == 'both' else (variant,)
-        primary = 'nynorsk' if self.language == 'nn' or variant == 'nynorsk' else 'bokmal'
+        primary = variant if variant != 'both' else ('nynorsk' if self.language == 'nn' else 'bokmal')
         contents, sound = [], ''
         for selected in variants:
             with self.page() as page:
@@ -216,7 +229,13 @@ class SourceContext:
                     word, number, page, download_audio=audio and selected == primary and not bool(cached),
                     audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout,
                     verbose=False, on_error=lambda source, error: self.issue(word, source, error),
-                    remaining_timeout=lambda: self.timeout, variant=selected)
+                    remaining_timeout=lambda: self.timeout, variant=selected,
+                    table_audio=(self.config.section('audio')['enabled'] and
+                                 self.config.data.get('cards', {}).get('normal', {}).get('audio', True) and
+                                 self.config.section('sources').get('lexin', {}).get('table_audio', False)),
+                    on_table_media=self.register_audio,
+                    audio_cache=self.config.section('audio')['cache'],
+                    table_fallback=self.table_audio_fallback)
             contents.append(content)
             sound = selected_sound or sound
         content = ''.join(contents)
@@ -247,7 +266,8 @@ def dictionary_content(name, word, number, ctx):
         return block(name, oxford_content(word, ctx))
     if name == 'lexin':
         priority = ctx.config.section('audio')['priority']
-        audio = ctx.config.section('audio')['enabled'] and priority and priority[0] == 'lexin'
+        audio = (ctx.config.section('audio')['enabled'] and priority and priority[0] == 'lexin'
+                 and ctx.config.data.get('cards', {}).get('normal', {}).get('audio', True))
         return ctx.lexin(word, number, audio=audio)
     if name == 'google_translate':
         runtime = ctx.config.section('runtime')
@@ -381,7 +401,7 @@ def select_audio(word, number, ctx):
             if provider == 'google_tts':
                 from gtts import gTTS
                 buffer = BytesIO()
-                language = 'no' if ctx.language == 'nb' else ctx.language
+                language = ctx.audio_language('google_tts')
                 gTTS(text=word, lang=language, timeout=ctx.timeout).write_to_fp(buffer)
                 return ctx.save_audio(word, cache_provider, buffer.getvalue())
         except Exception as exc:

@@ -1,4 +1,32 @@
 /* Unified V4: current Norwegian styling, shared by all sources and languages. */
+/* Exercise fronts share the existing dictionary surface. Vocabulary is unchanged. */
+.gt-container.exercise-container { box-sizing: border-box; width: 100%; max-width: 900px; text-align: center; direction: ltr; }
+.night_mode .gt-container.exercise-container { background: #2d2d2d; border-color: #404040; }
+.night_mode .exercise-container .gt-title { color: #bbbbbb; }
+.night_mode .exercise-container .gt-separator { background: #404040; }
+.exercise-language, .exercise-hint, .exercise-meaning { color: #5f6368; font-size: .9em; margin: 10px 0; }
+.exercise-instruction { color: #202124; margin: 16px 0; line-height: 1.6; }
+.exercise-question, .exercise-answer { color: #202124; font-size: 1.5em; line-height: 1.7; margin: 24px 0; overflow-wrap: anywhere; }
+.gt-container .exercise-gap-text[dir="ltr"] { text-align: left !important; }
+.gt-container .exercise-gap-text[dir="rtl"] { text-align: right !important; }
+.exercise-gap { display: inline-block; min-width: 65px; border-bottom: 2px solid #174b78; }
+.exercise-gap-entry { box-sizing: border-box; width: 110px; max-width: 100%; min-height: 44px; font: inherit; font-size: 16px; color: #202124; background: #fff; border: 1px solid #bdd4e9; border-radius: 6px; margin: 3px 5px; padding: 6px 8px; text-align: center; }
+.nightMode .exercise-gap-entry, .night_mode .exercise-gap-entry,
+:root[data-theme='dark'] .exercise-gap-entry { color: #e8eaed; background: #242424; border-color: #53728c; }
+.exercise-gap-solution { color: #174b78; background: #e5f0fa; border-radius: 4px; padding: 1px 4px; }
+.nightMode .exercise-gap-solution, .night_mode .exercise-gap-solution,
+:root[data-theme='dark'] .exercise-gap-solution { color: #d4eaff; background: #213b50; }
+.exercise-type-answer { max-width: 600px; margin: 16px auto; padding: 0 12px; }
+.exercise-type-answer input { box-sizing: border-box; width: 100%; min-height: 46px; font: inherit; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; color: #202124; background: #fff; direction: inherit; text-align: start; }
+.exercise-audio { margin: 16px auto; text-align: center; }
+.exercise-audio audio { max-width: 100%; }
+.nightMode .exercise-language, .night_mode .exercise-language, .nightMode .exercise-hint, .night_mode .exercise-hint, .nightMode .exercise-meaning, .night_mode .exercise-meaning,
+:root[data-theme='dark'] .exercise-language, :root[data-theme='dark'] .exercise-hint, :root[data-theme='dark'] .exercise-meaning { color: #bbbbbb; }
+.nightMode .exercise-question, .night_mode .exercise-question, .nightMode .exercise-answer, .night_mode .exercise-answer, .nightMode .exercise-instruction, .night_mode .exercise-instruction,
+:root[data-theme='dark'] .exercise-question, :root[data-theme='dark'] .exercise-answer, :root[data-theme='dark'] .exercise-instruction { color: #e8eaed; }
+.nightMode .exercise-type-answer input, .night_mode .exercise-type-answer input, :root[data-theme='dark'] .exercise-type-answer input { color: #e8eaed; background: #242424; border-color: #404040; }
+.nightMode .exercise-gap, .night_mode .exercise-gap, :root[data-theme='dark'] .exercise-gap { border-color: #d4eaff; }
+@media (max-width: 600px) { .exercise-question, .exercise-answer { font-size: 1.3em; } }
 .card, body { font-family: "Vazirmatn", Tahoma, sans-serif; margin: 0; padding: 12px; }
 .front { font-size: 1.5em; text-align: center; padding: 12px; }
 .front audio { display: block; max-width: 100%; margin: 8px auto; }
@@ -74,6 +102,10 @@
 .lexin-content dd { margin: 0; }
 .lexin-content dd em::before { content: " "; }
 .lexin-content .dictionary-ordbank { overflow-x: auto; margin: 12px 0; }
+.lexin-form-audio { display: none; }
+.lexin-form-play { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 36px; padding: 0; margin: 4px 6px; border: 1px solid #8a8a8a; border-radius: 50%; background: transparent; color: #404040; font-size: 18px; vertical-align: middle; }
+.nightMode .lexin-form-play, .night_mode .lexin-form-play,
+:root[data-theme='dark'] .lexin-form-play { color: #e8eaed; border-color: #bbbbbb; }
 .lexin-content table { border-collapse: collapse; width: 100%; min-width: 450px; font-size: .9em; }
 .lexin-content th, .lexin-content td { border: 1px solid #e0e0e0; padding: 8px; text-align: left; }
 .lexin-content th { background: rgba(127,127,127,.08); font-weight: 600; }

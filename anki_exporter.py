@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from lexin_scraper import normalize_headword
 from sources import SOURCE_SPECS, supported
+from exercises import EXERCISE_FIELDS, KINDS
 
 FIELDS = ['Word', 'FrontField', *SOURCE_SPECS, 'Info']
 
@@ -32,7 +33,49 @@ def answer_template(config):
 
 
 def row_back(row, config):
+    if row.get('Kind', 'normal') != 'normal':
+        return row.get('BackField', '') + str(row.get('Info', '') or '')
     return ''.join(str(row.get(name, '') or '') for name in display_sources(config)) + str(row.get('Info', '') or '')
+
+
+def exercise_model_id(kind, config):
+    return config.data.get('practice', {}).get('model_id_base', 1559328500) + KINDS.index(kind) - 1
+
+
+def exercise_model_name(kind):
+    return 'Vocabulary Exercise · ' + kind
+
+
+def note_values(row, config):
+    if row.get('Kind', 'normal') != 'normal':
+        return [row['Identity'], html.escape(row['Words']), html.escape(row['Answer']), row['FrontField'],
+                row['BackField'], row.get('Sound', ''), row.get('Info', '')]
+    values = {'Word': html.escape(row['Words']), 'FrontField': row['FrontField'],
+              **{name: row.get(name, '') for name in SOURCE_SPECS}, 'Info': row.get('Info', '')}
+    return [str(values.get(name, '') or '') for name in FIELDS]
+
+
+def note_guid(row, config):
+    import genanki
+    settings = config.section('anki')
+    kind = row.get('Kind', 'normal')
+    if kind != 'normal':
+        return genanki.guid_for(exercise_model_id(kind, config), settings['deck_id'], row['Identity'])
+    return genanki.guid_for(settings['model_id'], settings['deck_id'],
+                           config.section('language')['source'], normalize_headword(row['Words']))
+
+
+def write_import_csv(rows, path, config):
+    """Positional field mapping supports distinct existing note types in one file."""
+    import csv
+    with path.open('w', encoding='utf-8-sig', newline='') as stream:
+        stream.write('#separator:Comma\n#html:true\n#notetype column:1\n#tags column:2\n#guid column:3\n')
+        writer = csv.writer(stream)
+        for row in rows:
+            kind = row.get('Kind', 'normal')
+            name = 'Unified Vocabulary V5' if kind == 'normal' else exercise_model_name(kind)
+            values = note_values(row, config)
+            writer.writerow([name, ' '.join(row.get('Tags', [])), note_guid(row, config), *values, *([''] * (len(FIELDS) - len(values)))])
 
 
 def generate_anki_package(rows, output_path, config, media_files):
@@ -44,18 +87,32 @@ def generate_anki_package(rows, output_path, config, media_files):
                          templates=[{'name': 'Vocabulary', 'qfmt': '<div class="front">{{FrontField}}</div>',
                                      'afmt': answer_template(config)}], css=css, sort_field_index=0)
     deck = genanki.Deck(settings['deck_id'], settings['deck_name'])
+    exercise_models = {}
     references = set()
     for row in rows:
         word = row['Words']
-        field_values = {'Word': html.escape(word), 'FrontField': row['FrontField'],
-                        **{name: row.get(name, '') for name in SOURCE_SPECS}, 'Info': row.get('Info', '')}
-        values = [str(field_values.get(name, '') or '') for name in FIELDS]
-        deck.add_note(genanki.Note(model=model, fields=values,
-                                 guid=genanki.guid_for(settings['model_id'], settings['deck_id'],
-                                                      config.section('language')['source'], normalize_headword(word))))
+        values = note_values(row, config)
+        kind = row.get('Kind', 'normal')
+        selected_model = model
+        if kind != 'normal':
+            if kind not in exercise_models:
+                typed = ('<div class="exercise-type-answer">{{type:Answer}}</div>'
+                         '<script>(function(){var front=document.querySelector("[data-answer-direction]");'
+                         'var answer=document.getElementById("typeans");if(front&&answer){'
+                         'var direction=front.getAttribute("data-answer-direction");answer.setAttribute("dir",direction);'
+                         'answer.style.direction=direction;answer.style.textAlign=direction==="rtl"?"right":"left";}})();</script>') if kind == 'type' else ''
+                exercise_models[kind] = genanki.Model(
+                    exercise_model_id(kind, config), exercise_model_name(kind),
+                    fields=[{'name': name} for name in EXERCISE_FIELDS],
+                    templates=[{'name': kind, 'qfmt': '{{Front}}' + typed,
+                                'afmt': '{{FrontSide}}<hr id="answer">{{Back}}{{#Info}}{{Info}}{{/Info}}'}],
+                    css=css, sort_field_index=1)
+            selected_model = exercise_models[kind]
+        guid = note_guid(row, config)
+        deck.add_note(genanki.Note(model=selected_model, fields=values, guid=guid, tags=row.get('Tags', [])))
         content = ''.join(values)
         references.update(re.findall(r'\[sound:([^\]]+)\]', content))
-        references.update(re.findall(r'<img[^>]+src=["\']([^"\']+)', content))
+        references.update(re.findall(r'<(?:img|audio)[^>]+src=["\']([^"\']+)', content))
     references.update(re.findall(r'url\(["\']?([^"\')]+)', css))
     package = genanki.Package(deck)
     package.media_files = [str(Path(path).resolve()) for path in sorted(set(media_files))

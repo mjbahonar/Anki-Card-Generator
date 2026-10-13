@@ -75,7 +75,7 @@ def download_images(word, ctx):
                     ctx.images_dir.mkdir(parents=True, exist_ok=True)
                     path = ctx.images_dir / filename
                     image.convert('RGBA' if 'A' in image.getbands() else 'RGB').save(path, format='PNG')
-                ctx.media.add(path.resolve())
+                ctx.register_media(path)
                 markup.append('<div class="image-result"><img src="' + filename + '" alt="' + html.escape(word, quote=True)
                               + '"><div class="image-credit">' + html.escape(caption) + '</div></div>')
             except Exception as exc:

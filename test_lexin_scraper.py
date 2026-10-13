@@ -6,6 +6,17 @@ from lexin_scraper import (normalize_headword, render_lexin_entry,
 
 
 class LexinTests(unittest.TestCase):
+    def test_table_audio_controls_are_inserted_only_for_table_forms(self):
+        markup = '<div class="ordbank-table desktop"><table><tr><td><div><span>et hus</span><a class="tts-btn">Play</a></div></td></tr></table></div><p>et hus</p>'
+        rendered = render_lexin_entry(markup, table_sounds={'et hus': 'table.mp3'})
+        self.assertEqual(rendered.count('<audio'), 1)
+        self.assertEqual(rendered.count('class="lexin-form-play"'), 1)
+        self.assertNotIn('controls', rendered)
+        self.assertIn('src="table.mp3"', rendered)
+        self.assertNotIn('autoplay', rendered)
+        self.assertNotIn('tts-btn', rendered)
+        self.assertNotIn('<audio', render_lexin_entry(markup))
+
     def test_headword_requires_whole_word_and_preserves_accents(self):
         self.assertEqual(normalize_headword(' BOK '), 'bok')
         self.assertNotEqual(normalize_headword('barnebok'), 'bok')
