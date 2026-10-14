@@ -25,7 +25,7 @@ class Config:
 
 
 def load_config(path):
-    from sources import SOURCE_SPECS
+    from app.sources import SOURCE_SPECS
 
     path = Path(path).resolve()
     try:
@@ -59,9 +59,18 @@ def load_config(path):
                     {'order'} if section == 'input' else set())
         if section != 'sources' and set(data[section]) - set(keys) - optional:
             raise ConfigError(f'Unknown setting in [{section}]: {set(data[section]) - set(keys) - optional}')
-    if set(data) - set(required) - {'practice', 'cards', 'media'}:
+    cache = data.setdefault('dictionary_cache', {'enabled': True, 'path': 'Cache/dictionaries.sqlite3', 'refresh': False})
+    if (not isinstance(cache, dict) or set(cache) - {'enabled', 'path', 'refresh'}
+            or type(cache.get('enabled', True)) is not bool or type(cache.get('refresh', False)) is not bool
+            or not isinstance(cache.get('path', 'Cache/dictionaries.sqlite3'), str)
+            or not cache.get('path', 'Cache/dictionaries.sqlite3').strip()):
+        raise ConfigError('dictionary_cache requires enabled/refresh booleans and a non-empty path')
+    meaning = data.setdefault('meaning', {'enabled': True})
+    if not isinstance(meaning, dict) or set(meaning) - {'enabled'} or type(meaning.get('enabled', True)) is not bool:
+        raise ConfigError('meaning.enabled must be true or false')
+    if set(data) - set(required) - {'practice', 'cards', 'media', 'dictionary_cache', 'meaning'}:
         raise ConfigError(f'Unknown configuration section: {set(data) - set(required)}')
-    from exercises import validate_cards
+    from app.exercises import validate_cards
     validate_cards(data)
     if data['input'].get('order', 'excel') not in ('excel', 'random'):
         raise ConfigError('input.order must be excel or random')

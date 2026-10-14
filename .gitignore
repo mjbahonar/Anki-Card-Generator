@@ -1,6 +1,7 @@
 # Ignore Excel files
 *.xls
 *.xlsx
+!/Template.xlsx
 
 # Ignore CSV files
 *.csv
@@ -20,3 +21,6 @@
 
 __pycache__/
 *.py[cod]
+
+# Local dictionary database and archived media
+/Cache/

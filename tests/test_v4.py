@@ -14,13 +14,13 @@ from bs4 import BeautifulSoup
 
 import pandas as pd
 
-from anki_exporter import FIELDS, answer_template, display_sources, generate_anki_package, info_html
-from app_config import Config, ConfigError, load_config
+from app.anki_exporter import FIELDS, answer_template, display_sources, generate_anki_package, info_html
+from app.app_config import Config, ConfigError, load_config
 from main import export_outputs, read_words, run
-from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
-from sources import clean_html, block
+from app.sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
+from app.sources import clean_html, block
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class V4Tests(unittest.TestCase):
@@ -45,11 +45,11 @@ class V4Tests(unittest.TestCase):
         self.config.section('runtime')['source_timeout_seconds'] = 5
         context = SourceContext(self.config)
         self.addCleanup(context.close)
-        with patch('sources.time.monotonic', return_value=100):
+        with patch('app.sources.time.monotonic', return_value=100):
             with context.source_budget():
-                with patch('sources.time.monotonic', return_value=103):
+                with patch('app.sources.time.monotonic', return_value=103):
                     self.assertEqual(context.timeout, 2)
-                with patch('sources.time.monotonic', return_value=106):
+                with patch('app.sources.time.monotonic', return_value=106):
                     with self.assertRaises(TimeoutError):
                         context.fetch('https://example.com')
         self.assertEqual(context.timeout, self.config.section('runtime')['timeout_seconds'])
@@ -58,14 +58,14 @@ class V4Tests(unittest.TestCase):
         self.config.section('runtime')['source_timeout_seconds'] = 3
         context = SourceContext(self.config)
         self.addCleanup(context.close)
-        with patch('sources.time.monotonic', return_value=100):
+        with patch('app.sources.time.monotonic', return_value=100):
             with context.source_budget():
-                with patch('sources.time.sleep') as sleep:
+                with patch('app.sources.time.sleep') as sleep:
                     context.pause(50)
                     sleep.assert_called_once_with(3)
 
     def test_ordbokene_exact_homographs_emphasis_and_inflection(self):
-        from ordbokene_scraper import exact_article, render_article
+        from app.ordbokene_scraper import exact_article, render_article
         markup = '''<div class="article-title"><h3>bok<span class="hgno"><span class="sr-only">1</span>I</span></h3>
           <div class="subheader">noun <em>feminine</em></div></div><button>Inflection</button>
           <table class="infl-table"><caption>Inflection</caption><thead><tr><th colspan="2">singular</th></tr></thead>
@@ -82,13 +82,13 @@ class V4Tests(unittest.TestCase):
     def test_image_fallback_persists_media_and_credits(self):
         from io import BytesIO
         from PIL import Image
-        from image_sources import download_images
+        from app.image_sources import download_images
         context = SourceContext(self.config)
         self.addCleanup(context.close)
         buffer = BytesIO()
         Image.new('RGB', (100, 100), 'red').save(buffer, format='PNG')
         context.fetch = Mock(return_value=Mock(content=buffer.getvalue()))
-        with patch('image_sources.candidates', side_effect=[ValueError('Google blocked'),
+        with patch('app.image_sources.candidates', side_effect=[ValueError('Google blocked'),
                    [('https://example.com/image.png', 'Artist | CC BY 4.0')]]):
             result = download_images('cat', context)
         self.assertIn('CC BY 4.0', result)
@@ -100,14 +100,14 @@ class V4Tests(unittest.TestCase):
     def test_images_skip_invalid_response_and_fill_requested_count(self):
         from io import BytesIO
         from PIL import Image
-        from image_sources import download_images
+        from app.image_sources import download_images
         self.config.section('sources')['images'].update(count=1, priority=['commons'])
         context = SourceContext(self.config)
         self.addCleanup(context.close)
         buffer = BytesIO()
         Image.new('RGB', (90, 90), 'blue').save(buffer, format='PNG')
         context.fetch = Mock(side_effect=[Mock(content=b'not an image'), Mock(content=buffer.getvalue())])
-        with patch('image_sources.candidates', return_value=[('https://example.com/bad',''),
+        with patch('app.image_sources.candidates', return_value=[('https://example.com/bad',''),
              ('https://example.com/good','credit'), ('https://example.com/extra','')]):
             result = download_images('book', context)
         self.assertEqual(result.count('<img'), 1)
@@ -167,7 +167,7 @@ class V4Tests(unittest.TestCase):
             self.assertEqual(engine.chromium.launch.call_args.kwargs['timeout'], context.timeout * 1000)
 
     def test_lexin_search_errors_are_reported_without_console_traceback(self):
-        from lexin_scraper import scrape_and_process_lexin
+        from app.lexin_scraper import scrape_and_process_lexin
         page = Mock()
         page.goto.side_effect = RuntimeError('search failed\nlong traceback')
         callback, output = Mock(), io.StringIO()
@@ -264,7 +264,9 @@ class V4Tests(unittest.TestCase):
                            ('lexin', 'bokmalsordboka', 'google_translate', 'dict_com', 'images')}
                            for name in SOURCE_SPECS}
         data['input']['file'] = str(self.directory / 'input.xlsx')
+        data['input'].update(header=False, sheet=0, word_column=0, order='excel', max_words=0, deduplicate=True)
         data['output']['directory'] = str(self.directory)
+        data['dictionary_cache'] = {'enabled': True, 'path': str(self.directory / 'cache.sqlite3')}
         data['audio']['directory'] = str(self.directory / 'Audio')
         data['style']['file'] = str(ROOT / 'Styles/cards.css')
         data['runtime']['keep_awake'] = False
@@ -428,7 +430,7 @@ class V4Tests(unittest.TestCase):
     def test_imports_do_not_launch_browser_or_read_excel(self):
         import importlib
         import main
-        with patch('pandas.read_excel') as reader, patch('sources.SourceContext') as context:
+        with patch('pandas.read_excel') as reader, patch('app.sources.SourceContext') as context:
             importlib.reload(main)
             reader.assert_not_called()
             context.assert_not_called()

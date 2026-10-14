@@ -2,9 +2,9 @@
 import html
 from pathlib import Path
 import re
-from lexin_scraper import normalize_headword
-from sources import SOURCE_SPECS, supported
-from exercises import EXERCISE_FIELDS, KINDS
+from app.lexin_scraper import normalize_headword
+from app.sources import SOURCE_SPECS, supported
+from app.exercises import EXERCISE_FIELDS, KINDS, meaning_html
 
 FIELDS = ['Word', 'FrontField', *SOURCE_SPECS, 'Info']
 
@@ -28,14 +28,14 @@ def info_html(config):
 
 def answer_template(config):
     body = '\n'.join('{{#' + name + '}}{{' + name + '}}{{/' + name + '}}'
-                     for name in display_sources(config))
+                     for name in (display_sources(config) or [next(iter(SOURCE_SPECS))]))
     return '{{FrontSide}}<hr id="answer">\n' + body + '\n{{#Info}}{{Info}}{{/Info}}'
 
 
 def row_back(row, config):
     if row.get('Kind', 'normal') != 'normal':
         return row.get('BackField', '') + str(row.get('Info', '') or '')
-    return ''.join(str(row.get(name, '') or '') for name in display_sources(config)) + str(row.get('Info', '') or '')
+    return meaning_html(row, config) + ''.join(str(row.get(name, '') or '') for name in display_sources(config)) + str(row.get('Info', '') or '')
 
 
 def exercise_model_id(kind, config):
@@ -52,6 +52,13 @@ def note_values(row, config):
                 row['BackField'], row.get('Sound', ''), row.get('Info', '')]
     values = {'Word': html.escape(row['Words']), 'FrontField': row['FrontField'],
               **{name: row.get(name, '') for name in SOURCE_SPECS}, 'Info': row.get('Info', '')}
+    # Reuse the first displayed source field to keep the published schema intact.
+    # With all sources disabled, the existing first source field holds only meaning.
+    active = display_sources(config)
+    first = next(iter(active or SOURCE_SPECS))
+    personal_meaning = meaning_html(row, config)
+    if personal_meaning:
+        values[first] = personal_meaning + (str(values.get(first, '') or '') if active else '')
     return [str(values.get(name, '') or '') for name in FIELDS]
 
 

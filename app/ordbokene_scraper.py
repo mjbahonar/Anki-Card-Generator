@@ -2,7 +2,7 @@
 import html
 from urllib.parse import quote, urljoin
 from bs4 import BeautifulSoup
-from lexin_scraper import normalize_headword
+from app.lexin_scraper import normalize_headword
 
 
 def exact_article(markup, word):
@@ -56,7 +56,10 @@ def ordbokene_content(word, dictionary, ctx):
                     article.locator('table.infl-table').first.wait_for(timeout=ctx.timeout * 1000)
                 except Exception as exc:
                     ctx.issue(word, source + '_inflection', exc)
-            parts.append(render_article(article.inner_html()))
+            markup = article.inner_html()
+            if hasattr(ctx, 'capture_entry'):
+                ctx.capture_entry(markup, page.url)
+            parts.append(render_article(markup))
     if not parts:
         raise ValueError('No exact ' + source + ' entry')
     credit = ('<div class="image-credit">Bokmålsordboka/Nynorskordboka, Universitetet i Bergen og Språkrådet, '

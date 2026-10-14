@@ -9,6 +9,16 @@
 [media]
 anki_directory = ""
 
+# Persistent dictionary results, original entry HTML and media backups.
+[dictionary_cache]
+enabled = true
+path = "Cache/dictionaries.sqlite3"
+refresh = false                # true fetches again; set back to false for reuse
+
+# Optional personal meaning from the fifth Excel column, first on card backs.
+[meaning]
+enabled = true                 # false hides personal meanings for every card type
+
 # ======================================================================
 # 01. LANGUAGES
 # ======================================================================
@@ -29,14 +39,15 @@ model_id_base = 1559328500       # Keep fixed after the first exercise import
 # ======================================================================
 # 02. EXCEL INPUT
 # ======================================================================
-# Adjacent columns: Input | Type | Tags | Answer
+# Five adjacent columns: Input | Type | Tags | Answer | Meaning
+# Meaning is optional; shown first on the back with Excel text formatting.
 # Blank/missing Type = normal. Tags/Answer are optional for normal cards.
 # Without a header: header = false, word_column = 0.
 # With a header: header = true, word_column = 0 (or the first header name).
 [input]
-file = "New Words.xlsx"         # Your workbook; example template is supplied separately
+file = "Input.xlsx"         # Your workbook; example template is supplied separately
 sheet = 0                      # First worksheet, or its name
-header = false                 # Set true ONLY when row 1 contains column names
+header = true                 # Set true ONLY when row 1 contains column names
 word_column = 0                # First input column; zero-based index
 deduplicate = true
 order = "excel"                # excel = worksheet order; random = shuffle on each run

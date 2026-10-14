@@ -1,4 +1,4 @@
-"""Version 4. Edit config.toml, then run python main.py."""
+"""Unified application. Edit config.toml, then run python main.py."""
 import argparse
 from contextlib import nullcontext
 from datetime import datetime
@@ -8,14 +8,14 @@ from pathlib import Path
 import sys
 import time
 
-from anki_exporter import display_sources, generate_anki_package, info_html, row_back
-from app_config import ConfigError, load_config
-from sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
-from console_report import ConsoleReport, concise
-from exercises import read_records, options, language_settings, exercise_audio, render_exercise, direction, complete_gap
-from anki_exporter import write_import_csv
+from app.anki_exporter import display_sources, generate_anki_package, info_html, row_back
+from app.app_config import ConfigError, load_config
+from app.sources import SOURCE_SPECS, SourceContext, dictionary_content, select_audio
+from app.console_report import ConsoleReport, concise
+from app.exercises import read_records, options, language_settings, exercise_audio, render_exercise, direction, complete_gap
+from app.anki_exporter import write_import_csv
 
-VERSION = '5.2.0'
+VERSION = '5.3.0'
 
 
 def read_words(config):
@@ -49,7 +49,7 @@ def html_preview(rows, config):
 def export_outputs(rows, config, stem, context, recovery=False):
     import pandas as pd
     output = config.resolve(config.section('output')['directory'])
-    columns = ['Words', 'Kind', 'Answer', 'Tags', 'FrontField', 'BackField', 'Sound', *display_sources(config), 'Info']
+    columns = ['Words', 'Kind', 'Answer', 'Tags', 'Meaning', 'FrontField', 'BackField', 'Sound', *display_sources(config), 'Info']
     frame = pd.DataFrame(rows).reindex(columns=columns, fill_value='')
     frame['Tags'] = [' '.join(row.get('Tags', [])) for row in rows]
     formats = ['csv'] if recovery else list(dict.fromkeys(config.section('output')['formats']))
@@ -166,6 +166,8 @@ def run(config, context_factory=SourceContext):
                                           context.errors[-1]['message'])
                         else:
                             report.source(name, 'OK', started)
+                            if getattr(context, 'last_cache_hit', False):
+                                print('  CACHE reused saved dictionary result', flush=True)
                             for issue in context.errors[previous:]:
                                 print(f'  WARN  {issue["source"]}: {concise(issue["message"])}', flush=True)
                     except Exception as exc:
@@ -186,7 +188,7 @@ def run(config, context_factory=SourceContext):
                 normal_options = options(config, 'normal')
                 if normal_options['title'] or normal_options['instruction']:
                     qlang, alang = language_settings(config)
-                    from exercises import language_name
+                    from app.exercises import language_name
                     hint = normal_options['instruction'].format(question_language=language_name(config, qlang), answer_language=language_name(config, alang))
                     row['FrontField'] = '<div class="gt-title">' + html.escape(normal_options['title']) + '</div><div class="exercise-instruction">' + html.escape(hint) + '</div>' + row['FrontField']
                 every = config.section('output')['autosave_every']
@@ -239,9 +241,30 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description='Unified Anki Card Generator')
     parser.add_argument('--config', type=Path, default=Path(__file__).with_name('config.toml'))
-    parser.add_argument('--check', action='store_true', help='Validate config and Excel without fetching sources')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--check', action='store_true', help='Validate config and Excel without fetching sources')
+    modes.add_argument('--clear-cache', metavar='WORD', help='Delete cached dictionary results for one word')
+    parser.add_argument('--source', choices=list(SOURCE_SPECS), help='Restrict --clear-cache to one dictionary')
     args = parser.parse_args(argv)
+    if args.source and args.clear_cache is None:
+        parser.error('--source requires --clear-cache')
     try:
+        if args.clear_cache is not None:
+            if not args.clear_cache.strip():
+                raise ConfigError('--clear-cache word must not be blank')
+            # Cache maintenance does not require a readable Excel workbook or browser.
+            import tomllib
+            from app.dictionary_cache import DictionaryCache
+            from app.app_config import Config
+            path = args.config.resolve()
+            with path.open('rb') as stream:
+                data = tomllib.load(stream)
+            cache = data.get('dictionary_cache', {})
+            config = Config(path, data)
+            count = DictionaryCache(config.resolve(cache.get('path', 'Cache/dictionaries.sqlite3'))).delete_word(
+                args.clear_cache, args.source)
+            print(f'Removed {count} cached results for {args.clear_cache!r} ({args.source or "all sources"}). Local media files retained.')
+            return 0
         config = load_config(args.config)
         if args.check:
             records, skipped = read_records(config)

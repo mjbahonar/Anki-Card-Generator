@@ -3,7 +3,7 @@ import html
 import re
 from urllib.parse import quote, urljoin, urlsplit
 from bs4 import BeautifulSoup
-from lexin_scraper import normalize_headword
+from app.lexin_scraper import normalize_headword
 
 
 def render_entry(word, soup, limit):
@@ -54,6 +54,9 @@ def oxford_content(word, ctx):
             response = ctx.fetch(url)
             soup = BeautifulSoup(response.text, 'html.parser')
             content = render_entry(word, soup, limit)
+            if hasattr(ctx, 'capture_entry'):
+                ctx.capture_entry(str(soup.select_one('.entry')), getattr(response, 'url', None)
+                                  if isinstance(getattr(response, 'url', None), str) else url)
         except Exception as exc:
             if not pieces:
                 raise

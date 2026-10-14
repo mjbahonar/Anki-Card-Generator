@@ -5,7 +5,7 @@ import re
 from io import BytesIO
 from string import Formatter
 
-from lexin_scraper import audio_filename, normalize_headword
+from app.lexin_scraper import audio_filename, normalize_headword
 
 KINDS = ('normal', 'type', 'sentence', 'gap', 'listen')
 EXERCISE_FIELDS = ['ID', 'Question', 'Answer', 'Front', 'Back', 'Sound', 'Info']
@@ -65,7 +65,7 @@ def language_name(config, code):
 
 
 def validate_cards(data):
-    from app_config import ConfigError
+    from app.app_config import ConfigError
     practice = data.get('practice', {})
     if not isinstance(practice, dict) or set(practice) - {'question_language', 'answer_language', 'language_names', 'model_id_base'}:
         raise ConfigError('Unknown or invalid [practice] setting')
@@ -105,7 +105,7 @@ def validate_cards(data):
 
 def read_records(config):
     import pandas as pd
-    from app_config import ConfigError
+    from app.app_config import ConfigError
     settings = config.section('input')
     try:
         frame = pd.read_excel(config.resolve(settings['file']), sheet_name=settings['sheet'],
@@ -124,7 +124,7 @@ def read_records(config):
     records, skipped, seen = [], [], set()
     question_lang, answer_lang = language_settings(config)
     for index, row in frame.iterrows():
-        question, kind, tags, answer = [cell(row, i) for i in range(4)]
+        question, kind, tags, answer, meaning = [cell(row, i) for i in range(5)]
         if not question:
             continue
         kind = kind.lower() or 'normal'
@@ -151,11 +151,29 @@ def read_records(config):
         import re
         tag_list = [re.sub(r'\s+', '_', tag.strip()) for tag in tags.replace('،', ',').split(',') if tag.strip()]
         tag_list = list(dict.fromkeys([options(config, kind)['tag'], *tag_list]))
-        records.append(dict(Words=question, Kind=kind, Answer=answer, Tags=tag_list, InputRow=line))
+        records.append(dict(Words=question, Kind=kind, Answer=answer, Meaning=meaning, Tags=tag_list, InputRow=line))
         if settings['max_words'] and len(records) >= settings['max_words']:
             break
     if not records and not skipped:
         raise ConfigError('The selected sheet/column contains no words')
+    if any(record['Kind'] != 'normal' for record in records):
+        from app.excel_formatting import read_question_formats
+        try:
+            formats = read_question_formats(config, records, position)
+        except Exception as exc:
+            raise ConfigError(f'Cannot read Excel prompt formatting: {exc}') from exc
+        for record in records:
+            if record['InputRow'] in formats:
+                record['QuestionRuns'] = formats[record['InputRow']]
+    if any(record['Meaning'] for record in records):
+        from app.excel_formatting import read_question_formats
+        try:
+            formats = read_question_formats(config, records, position + 4, field='Meaning', include_normal=True)
+        except Exception as exc:
+            raise ConfigError(f'Cannot read Excel meaning formatting: {exc}') from exc
+        for record in records:
+            if record['InputRow'] in formats:
+                record['MeaningRuns'] = formats[record['InputRow']]
     if settings.get('order', 'excel') == 'random':
         import random
         random.shuffle(records)
@@ -168,15 +186,35 @@ def identity(row, config):
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
 
-def exercise_audio(text, language, ctx):
-    """TTS cache is keyed by text AND spoken language; no dictionary lookup."""
-    from gtts import gTTS
+def meaning_html(row, config=None):
+    """Optional personal meaning, independent of dictionary caching and note IDs."""
+    if (config is not None and not config.data.get('meaning', {}).get('enabled', True)) or not row.get('Meaning', '').strip():
+        return ''
+    from app.excel_formatting import formatted_question
+    text = formatted_question({'Words': row['Meaning'], 'QuestionRuns': row.get('MeaningRuns')})
+    return ('<div class="gt-container custom-meaning-container"><div class="gt-title">meaning</div>'
+            '<hr class="gt-separator"><div class="source-content" dir="auto">' + text + '</div></div>')
+
+
+def cached_exercise_audio(text, language, ctx):
+    """Return only an existing valid TTS file; never generate or request audio."""
     spoken = 'no' if language in ('nb', 'nn') else language
     path = ctx.audio_dir / audio_filename(text, 'google_tts', spoken)
     if ctx.config.section('audio')['cache'] and path.is_file():
         data = path.read_bytes()
         if len(data) >= 128 and (data.startswith(b'ID3') or (data[0] == 255 and data[1] & 224 == 224)):
             return ctx.register_audio(path)
+    return ''
+
+
+def exercise_audio(text, language, ctx):
+    """TTS cache is keyed by text AND spoken language; no dictionary lookup."""
+    cached = cached_exercise_audio(text, language, ctx)
+    if cached:
+        return cached
+    from gtts import gTTS
+    spoken = 'no' if language in ('nb', 'nn') else language
+    path = ctx.audio_dir / audio_filename(text, 'google_tts', spoken)
     buffer = BytesIO()
     gTTS(text=text, lang=spoken, timeout=ctx.timeout).write_to_fp(buffer)
     data = buffer.getvalue()
@@ -194,7 +232,8 @@ def render_exercise(row, config):
     qname, aname = language_name(config, qlang), language_name(config, alang)
     instruction = settings['instruction'].format(question_language=qname, answer_language=aname)
     label = f'{qname} → {aname}' if kind in ('type', 'sentence') else aname
-    question = html.escape(row['Words'])
+    from app.excel_formatting import formatted_question
+    question = formatted_question(row)
     if kind == 'gap':
         number = 0
         def input_box(match):
@@ -203,8 +242,7 @@ def render_exercise(row, config):
             return (f'<input class="exercise-gap exercise-gap-entry" aria-label="Answer {number}" '
                     f'dir="{direction(alang)}" lang="{alang}" autocomplete="off" '
                     'autocapitalize="off" spellcheck="false" placeholder="…">')
-        question = GAP_MARKER.sub(input_box, question)
-    question = question.replace('\n', '<br>')
+        question = formatted_question(row, input_box)
     lang = qlang if kind in ('type', 'sentence') else alang
     header = ('<div class="gt-container exercise-container" dir="ltr">'
               f'<div class="gt-title">{html.escape(settings["title"])}</div>'
@@ -233,7 +271,7 @@ def render_exercise(row, config):
         back += f'<div class="exercise-meaning" dir="{direction(qlang)}">{html.escape(row["Answer"]).replace(chr(10), "<br>")}</div>'
     # FrontSide does not replay front audio on the back; repeat it explicitly.
     back += '<div class="exercise-audio">' + row.get('Sound', '') + '</div></div>'
-    row['BackField'] = back
+    row['BackField'] = meaning_html(row, config) + back
     row['Identity'] = identity(row, config)
     row['AnswerDirection'] = direction(alang)
     return row

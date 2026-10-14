@@ -5,7 +5,7 @@ from io import BytesIO
 from urllib.parse import quote, urljoin
 from bs4 import BeautifulSoup
 from PIL import Image
-from lexin_scraper import audio_filename
+from app.lexin_scraper import audio_filename
 
 
 def candidates(provider, word, ctx, count):
@@ -70,6 +70,7 @@ def download_images(word, ctx):
                 with Image.open(BytesIO(data)) as image:
                     if min(image.size) < 64:
                         continue
+                    ctx.archive_image(src, data, image.format, caption)
                     image.thumbnail((800, 800))
                     filename = audio_filename(word, 'image_' + provider, ctx.language).removesuffix('.mp3') + f'_{len(markup)}.png'
                     ctx.images_dir.mkdir(parents=True, exist_ok=True)

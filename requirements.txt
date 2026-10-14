@@ -1,6 +1,6 @@
 # Python 3.11 or newer
 pandas
-openpyxl
+openpyxl>=3.1.5
 xlrd
 requests
 beautifulsoup4

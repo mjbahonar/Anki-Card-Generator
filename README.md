@@ -2,6 +2,8 @@
 
 [راهنمای فارسی](README_fa.md) · [Release notes](CHANGELOG.md)
 
+Current release: **v5.3.0**. Existing V5 notes keep their fields and identities; preserve your local deck/model IDs and input settings when updating.
+
 Turn an Excel word list into styled Anki cards with definitions, examples, inflection tables and pronunciation. English and Norwegian share one application, one configuration file and one card style.
 
 **Edit `config.toml`. Run `python main.py`. Import the generated `.apkg` into Anki or AnkiDroid.**
@@ -26,7 +28,7 @@ python main.py --check
 python main.py
 ```
 
-Put words in `New Words.xlsx`, one per row in the first column, without a header. The default settings enable only Lexin Bokmål–English. All other source sections remain available with enabled = false. Source failures are reported while available results are saved.
+Copy the supplied `Template.xlsx` to `Input.xlsx`, then enter data below the first-row headers: **Word | Type | Tag | Answer | Meaning**. The distributed config uses `header = true` and the first worksheet. Leave Type blank for normal vocabulary; the dropdown also offers type, listen, sentence and gap. The template's second sheet is a quick reference; for listen, Word is the text spoken in the practice answer language and Answer is an optional translation, and gap requires one answer per blank in column D. Existing headerless workbooks remain supported with `header = false`. The default settings enable only Lexin Bokmål–English. All other source sections remain available with enabled = false. Source failures are reported while available results are saved.
 
 Generated files appear in `Output`. Start with `input.max_words = 3` for a small trial; set it to `0` to process the entire list.
 
@@ -109,26 +111,31 @@ After the first import, keep the deck/model IDs fixed. Disabling or reordering s
 
 ## Development
 
-`main.py` runs the pipeline, `app_config.py` validates settings, `sources.py` contains the source catalog/adapters, `lexin_scraper.py` handles Lexin, and `anki_exporter.py` builds Anki cards. Imports do not start browsers or read input files. Browser resources are created on demand and closed after processing.
+`main.py` runs the pipeline, `app/app_config.py` validates settings, `app/sources.py` contains the source catalog/adapters, `app/lexin_scraper.py` handles Lexin, and `app/anki_exporter.py` builds Anki cards. Imports do not start browsers or read input files. Browser resources are created on demand and closed after processing.
 
 ```powershell
-python -m unittest test_v4 test_lexin_scraper -v
+python -m unittest discover -s tests -v
 ```
 
 `main.py` is the application entry point. Use `config.toml` for everyday settings.
 
+All supporting Python modules live in the `app/` package; automated tests live in `tests/`. The repository root contains only `main.py` as a Python file. Run tests from the repository root with `python -m unittest discover -s tests -v`. Configuration, workbooks, styles, media and the existing dictionary database keep their paths.
+
+Exercise prompts (`type`, `sentence`, `gap`) retain direct Excel text formatting on the front: whole-cell and partial-text bold, italic, underline, strike-through and font colors; XLSX also retains solid cell fills and custom font sizes/families. Rich-text XLSX requires `openpyxl>=3.1.5` from requirements.txt. Gap markers work even across formatted runs. Plain question/answer values remain separate for speech, native typing and stable note identity. Listening prompts stay hidden on the front. Normal vocabulary cards retain their shared appearance. Conditional formatting, borders and spreadsheet geometry are not copied. The input workbook is read without being modified.
+
 | File | Purpose |
 | --- | --- |
 | `config.toml` | The only file you edit for everyday settings |
+| `Template.xlsx` | Blank five-column input template; copy to Input.xlsx |
 | `main.py` | The only file you run |
-| `app_config.py` | Configuration validation |
-| `sources.py` | Dictionary and audio adapters |
-| `lexin_scraper.py`, `oxford_scraper.py`, `ordbokene_scraper.py` | Dictionary-specific extraction |
-| `image_sources.py` | Google/Commons image downloading |
-| `anki_exporter.py` | Stable Anki model and package generation |
-| `console_report.py` | Console progress and final run summary |
+| `app/app_config.py` | Configuration validation |
+| `app/sources.py` | Dictionary and audio adapters |
+| `app/lexin_scraper.py`, `app/oxford_scraper.py`, `app/ordbokene_scraper.py` | Dictionary-specific extraction |
+| `app/image_sources.py` | Google/Commons image downloading |
+| `app/anki_exporter.py` | Stable Anki model and package generation |
+| `app/console_report.py` | Console progress and final run summary |
 | `Styles/cards.css` | The shared card style |
-| `test_v4.py`, `test_lexin_scraper.py` | Automated tests |
+| `tests/test_*.py` | Automated tests |
 
 See [release notes](CHANGELOG.md) for version changes and migration details, and [the release policy](RELEASING.md) for publishing conventions.
 
@@ -153,7 +160,13 @@ Lexin supports `variant = "bokmal"`, `"nynorsk"` or `"both"` in `[sources.lexin]
 
 ### Mixed exercise cards
 
-Excel may contain four adjacent columns starting at `input.word_column`: **input | type | tags | answer**. Existing one-column workbooks continue to work; blank type means `normal`. Type names are case-insensitive. Comma-separated input tags are merged with the automatic type tag; whitespace within a tag becomes an underscore. Each `[cards.<type>]` section allows editing `title`, `instruction`, `tag`, and `audio`. Leave the normal title/instruction blank to retain the vocabulary front.
+Excel may contain five adjacent columns starting at `input.word_column`: **input | type | tags | answer | meaning**. Existing one-column and four-column workbooks continue to work; blank type means `normal`. Type names are case-insensitive. Comma-separated input tags are merged with the automatic type tag; whitespace within a tag becomes an underscore. Each `[cards.<type>]` section allows editing `title`, `instruction`, `tag`, and `audio`. Leave the normal title/instruction blank to retain the vocabulary front.
+
+The fifth column is an optional personal meaning for every card type. Non-empty text appears first in the answer section, under the exact heading `meaning`, before dictionary results or exercise answers; English Info stays last. Direct Excel text formatting, including rich-text bold/color and line breaks, is retained. Blank/missing meaning creates no section. It does not replace the Answer column or affect typing comparison, speech, dictionary caching or note identity. Existing Anki fields/model IDs are retained; rerun and import the APKG to update cards.
+
+Set `[meaning] enabled = false` in config.toml to hide personal meanings for every card type; `true` enables them (also the default for older configs). The Excel text remains intact. Regenerate and import the APKG after changing this option.
+
+Excel font names include the bundled Vazirmatn fallback for devices without Windows fonts such as Calibri. A real Vazirmatn 700 bold face is included alongside the original regular font and packaged in APKG. This improves bold rendering on Android without depending on synthesized font weight. The open-source font and license come from [Vazirmatn's official repository](https://github.com/rastikerdar/vazirmatn). Import/sync the regenerated package and its media. Phone card zoom, OS text scaling and WebView fonts can still affect sizing and line wraps; desktop browser mobile emulation does not prove identical rendering on a physical phone.
 
 | Type | Input | Answer column | Audio |
 | --- | --- | --- | --- |
@@ -173,7 +186,7 @@ Exercise audio uses gTTS directly, with a language/text-specific cache and globa
 
 The regular CSV/XLSX remain analysis exports. Every CSV export also writes `*_anki.csv`, with note-type/HTML/tag/GUID import headers and positional fields. Import the APKG first to install the matching exercise models; then import this companion CSV in Anki Desktop (2.1.54+) to update notes. Select the intended deck. Keep the GUID and identity fields unchanged to update the same notes as APKG. CSV does not carry templates, CSS or media; audio must be available in `collection.media` (APKG includes referenced media). Use APKG for the easiest complete import. HTML preview includes fronts and revealed answers; it is not a quiz.
 
-Validation: `python -m unittest test_v4 test_lexin_scraper test_exercises -v` and `python main.py --check`.
+Validation: `python -m unittest discover -s tests -v` and `python main.py --check`.
 
 Set `input.order = "excel"` (default) to preserve worksheet order, or `"random"` to shuffle complete records on each run before fetching/exporting. The workbook is unchanged and answers/tags stay with their questions. `max_words` selects the first valid records before shuffling. This controls generation order; Anki review order is configured separately in Anki.
 
@@ -188,8 +201,57 @@ Set `[sources.lexin] table_audio = true` to include pronunciation controls only 
 
 Lexin table pronunciation prefers the original Lexin audio, with a short per-control wait and gTTS fallback if it is unavailable. These controls never play all forms automatically. The `type` template uses only one native comparison, inherited on the back through FrontSide.
 
+Table pronunciation checks both original Lexin files and previously downloaded gTTS fallback files before making requests. For uncached forms, Lexin gets up to 1.5 seconds when fallback is available; after a failed attempt, the remaining uncached forms of the same word use fallback without repeating the service wait. Cached original Lexin files remain preferred. Replay-button icons are omitted from media archiving; dictionary illustrations are retained. This reduces fresh-fetch delays without invalidating existing dictionary caches.
+
+For isolated live timing diagnostics, run `python -m tests.benchmark_lexin --label measurement gift hund bil`. It uses a temporary dictionary database and copies of existing audio under Output, measures fresh dictionary fetches and repeat cache hits, then writes `Output/lexin_benchmark_measurement.json`. User workbooks, the real cache and original media are not modified. Fresh timings vary with the network and audio-service response.
+
 Lexin table audio uses compact replay buttons rather than media-player bars, with no autoplay. Gap questions and completed answers align to the text direction (LTR left, RTL right); speaking answers omit the sample-answer notice.
 
 Shared media destination: set `[media] anki_directory = "C:/.../collection.media"` once near the top of config.toml. Audio and images keep their local originals and are copied there, including cached audio and table pronunciation. Blank disables external copying. Legacy audio.copy_to remains supported when the media section is absent. Use forward slashes in double-quoted TOML paths, or single quotes for literal Windows backslashes.
 
 Native typing accepts one answer line; multiline type answers are skipped with a reason. Typing direction is note-specific so importing another practice language does not change older cards. The exercise audio status and failures are shown in the console.
+
+### Persistent dictionary database
+
+`[dictionary_cache]` in `config.toml` enables a local SQLite database at `Cache/dictionaries.sqlite3`. Successful results are reused across runs by normalized word, dictionary and effective source options. Fixed dictionaries such as Oxford do not depend on the selected input language; Lexin variants remain separate. Translation results also include the source/target language pair. Changing examples, image count or audio options uses a separate result. Anki fields and note identities are unchanged.
+
+The database stores the exact generated card HTML, original fetched entry HTML and byte-for-byte backups of downloaded media. Original image-search files are retained alongside the resized card copies. Original entry images and directly exposed MP3 URLs (including Oxford pronunciation) are archived in `Cache/media`, even when the card renderer omits them. Dynamically generated Lexin headword/table audio is saved when enabled; site controls requiring other interactions are not automatically executed. This archives received entries, not an entire dictionary website. Archived-only assets do not change card appearance or audio priority.
+
+Audio used by cards stays in the configured `[audio].directory` (default `Audio`); card images stay in `[output].directory/media` (currently `Output/media`). Cache hits restore missing or changed files from database backups and register card media for APKG and optional copying to `[media].anki_directory`. Existing downloaded audio is reused; older text/image results are populated on their first successful run after this update. Empty, failed, timed-out or incomplete results are retried rather than cached. Cache errors produce warnings and allow fetching to continue.
+
+Set `dictionary_cache.refresh = true` to fetch again and replace successful results; then return it to `false` for reuse. `enabled = false` disables dictionary caching. Paths are relative to `config.toml`. The cache is local and ignored by Git; back up the SQLite file to preserve entries and media together. No extra database dependency or server is needed.
+
+SVG entry images are also archived without conversion. Failure to archive an optional original-entry image/audio file does not prevent caching valid card content and its downloaded media. The failed asset URL and error are recorded in the original document metadata; use `refresh = true` to retry these optional assets. This differs from incomplete dictionary text or card pronunciation, which still prevents caching the incomplete result.
+
+To inspect the database visually, install [DB Browser for SQLite](https://sqlitebrowser.org/dl/), open `Cache/dictionaries.sqlite3`, and select **Browse Data → results**. Columns include `word`, `source`, `content` (card HTML), `sound`, `documents` (original entry metadata/HTML) and `saved_at`. `result_media` maps results to filenames, and `assets` contains the binary file backups. In **Execute SQL**, use this read-only listing:
+
+```sql
+SELECT word, source, saved_at, sound FROM results ORDER BY source, word;
+```
+
+Lexin inspects only the first two result entries on the initial page and keeps those whose Norwegian headword exactly matches the input (case/Unicode/whitespace normalized). It never visits later result pages or scans later entries. Each matching entry keeps its definition, examples and inflection table; English-only matches and compounds are excluded. One headword pronunciation is used on the front, while enabled table pronunciation is processed for each retained entry. Existing Lexin caches, including older single-entry results, remain usable without refetching. To update an older word with both entries, explicitly clear that word's cache using the commands below.
+
+Remove all cache variants of one word without running the workbook or fetching sources:
+
+```powershell
+python main.py --clear-cache gift --source lexin
+python main.py --clear-cache gift
+```
+
+The first command affects Lexin only; the second affects all sources for that word. The configured database path is respected, even when caching is disabled. Related media references and unused binary backups are removed from the database; local audio/image files remain. A subsequent normal run fetches the deleted dictionary result again.
+
+For manual deletion in DB Browser's **Execute SQL**, explicitly remove child references too (some connections disable foreign keys), then save using **Write Changes**:
+
+```sql
+BEGIN;
+DELETE FROM result_media WHERE key IN (
+  SELECT key FROM results WHERE source = 'lexin' AND lower(trim(word)) = 'gift'
+);
+DELETE FROM results WHERE source = 'lexin' AND lower(trim(word)) = 'gift';
+DELETE FROM assets WHERE NOT EXISTS (
+  SELECT 1 FROM result_media WHERE result_media.digest = assets.digest
+);
+COMMIT;
+```
+
+The CLI also handles Unicode normalization and case folding for words beyond this ASCII example. Close DB Browser after saving before using the CLI or running the application.

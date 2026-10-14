@@ -3,16 +3,20 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 import html
+import hashlib
 from io import BytesIO
 from pathlib import Path
 import shutil
+import sqlite3
+import xml.etree.ElementTree as ET
 import time
 from urllib.parse import quote, urljoin
 
 from bs4 import BeautifulSoup
+from PIL import UnidentifiedImageError
 import requests
 
-from lexin_scraper import audio_filename, normalize_headword, scrape_and_process_lexin
+from app.lexin_scraper import audio_filename, normalize_headword, scrape_and_process_lexin
 
 
 @dataclass(frozen=True)
@@ -98,6 +102,128 @@ class SourceContext:
         self.errors = []
         self.lexin_results = {}
         self.lexin_audio_attempted = set()
+        from app.dictionary_cache import DictionaryCache
+        cache = config.data.get('dictionary_cache', {})
+        self.dictionary_cache = (DictionaryCache(config.resolve(cache.get('path', 'Cache/dictionaries.sqlite3')))
+                                 if cache.get('enabled', True) else None)
+        self.cache_capture = None
+        self.last_cache_hit = False
+
+    def archive_image(self, remote, data, image_format, caption):
+        if self.cache_capture is None:
+            return
+        suffix = {'JPEG': '.jpg', 'PNG': '.png', 'GIF': '.gif', 'WEBP': '.webp'}.get(image_format, '.bin')
+        filename = hashlib.sha256(data).hexdigest() + suffix
+        path = self.dictionary_cache.path.parent / 'media' / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        self.cache_capture['archive'].add(path)
+        self.cache_capture['documents'].append({'url': remote, 'caption': caption, 'assets': {remote: filename}})
+
+    def capture_entry(self, markup, url):
+        """Archive original entry HTML and its directly exposed image/audio files."""
+        if self.cache_capture is None:
+            return
+        url = str(url)
+        document = {'url': url, 'html': str(markup), 'assets': {}}
+        self.cache_capture['documents'].append(document)
+        soup = BeautifulSoup(str(markup), 'html.parser')
+        urls = []
+        for node in soup.select('img[src], audio[src], audio source[src], [data-src-mp3]'):
+            if node.name == 'img' and node.find_parent(class_='tts-btn'):
+                continue  # Replay icons are UI controls, not dictionary illustrations.
+            value = node.get('data-src-mp3') or node.get('src')
+            if value:
+                urls.append((urljoin(url, value), 'image' if node.name == 'img' else 'audio'))
+        for remote, kind in dict.fromkeys(urls):
+            if not remote.startswith(('https://', 'http://')):
+                continue
+            try:
+                if remote in self.cache_capture['urls']:
+                    filename = self.cache_capture['urls'][remote]
+                else:
+                    response = self.session.get(remote, timeout=self.timeout)
+                    response.raise_for_status()
+                    data = response.content
+                    self.check_budget()
+                    if kind == 'audio':
+                        if len(data) < 128 or not (data.startswith(b'ID3') or (data[0] == 255 and data[1] & 224 == 224)):
+                            raise ValueError('Dictionary audio is not MP3')
+                        suffix = '.mp3'
+                    elif data.lstrip().startswith((b'<svg', b'<?xml')):
+                        root = ET.fromstring(data)
+                        if root.tag.rsplit('}', 1)[-1] != 'svg':
+                            raise ValueError('Dictionary image response is not SVG')
+                        suffix = '.svg'
+                    else:
+                        from PIL import Image
+                        with Image.open(BytesIO(data)) as image:
+                            suffix = {'JPEG': '.jpg', 'PNG': '.png', 'GIF': '.gif', 'WEBP': '.webp'}.get(image.format)
+                            image.verify()
+                        if not suffix:
+                            raise ValueError('Unsupported dictionary image format')
+                    filename = hashlib.sha256(remote.encode()).hexdigest() + suffix
+                    path = self.dictionary_cache.path.parent / 'media' / filename
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(data)
+                    self.cache_capture['archive'].add(path)
+                    self.cache_capture['urls'][remote] = filename
+                document['assets'][remote] = filename
+            except Exception as exc:
+                document.setdefault('media_errors', []).append({'url': remote, 'message': str(exc)})
+                message = (f'Could not archive {kind}: {remote} | '
+                           + ('Response is not a supported image' if isinstance(exc, UnidentifiedImageError)
+                              else str(exc)))
+                self.issue(self.cache_capture['word'], 'dictionary_media', message)
+
+    def cache_result(self, name, word, loader, audio=False):
+        from app.dictionary_cache import cache_key
+        self.last_cache_hit = False
+        if self.dictionary_cache is None:
+            return loader()
+        key = cache_key(name, word, self.config, audio)
+        try:
+            cached = (None if self.config.data.get('dictionary_cache', {}).get('refresh', False)
+                      else self.dictionary_cache.get(key, self))
+            if (cached is None and name == 'lexin'
+                    and not self.config.data.get('dictionary_cache', {}).get('refresh', False)):
+                # Preserve valid pre-multiple-entry caches; clear a word explicitly to update it.
+                import json
+                legacy = json.loads(key)
+                legacy[3].pop('adapter_revision', None)
+                legacy_key = json.dumps(legacy, sort_keys=True, ensure_ascii=False)
+                cached = self.dictionary_cache.get(legacy_key, self)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            self.issue(word, 'dictionary_cache', exc)
+            cached = None
+        if cached is not None:
+            content, sound, documents = cached
+            if name == 'lexin':
+                self.lexin_results[word] = (content, sound)
+                if audio:
+                    self.lexin_audio_attempted.add(word)
+            self.last_cache_hit = True
+            return content
+        previous = self.cache_capture
+        capture = {'word': word, 'source': name, 'documents': [], 'archive': set(), 'urls': {}, 'media': set()}
+        self.cache_capture = capture
+        errors = len(self.errors)
+        try:
+            content = loader()
+            self.check_budget()
+            # Optional archive failures must not discard valid card text/audio.
+            # Incomplete dictionary/card fetches still retain the old good result.
+            if content and not any(e['source'] not in ('media_copy', 'dictionary_media') for e in self.errors[errors:]):
+                sound = self.lexin_results.get(word, ('', ''))[1] if name == 'lexin' else ''
+                media = [(p, 'audio' if p.suffix.lower() == '.mp3' else 'image') for p in capture['media']]
+                media.extend((p, 'archive') for p in capture['archive'])
+                try:
+                    self.dictionary_cache.put(key, name, word, content, sound, capture['documents'], media)
+                except (OSError, sqlite3.Error) as exc:
+                    self.issue(word, 'dictionary_cache', exc)
+            return content
+        finally:
+            self.cache_capture = previous
 
     def check_budget(self):
         if self.source_deadline is not None and time.monotonic() >= self.source_deadline:
@@ -138,6 +264,11 @@ class SourceContext:
         response = self.session.get(url, timeout=self.timeout)
         response.raise_for_status()
         self.check_budget()
+        if (self.cache_capture is not None and self.cache_capture['source'] != 'oxford'
+                and 'html' in response.headers.get('Content-Type', '')):
+            soup = BeautifulSoup(response.text, 'html.parser')
+            entries = soup.select('.entry, section.results__container, .container.mt-2, #id-sec-entry-group-dcom, section.synonym-antonym-panel')
+            self.capture_entry(''.join(str(el) for el in entries) or response.text, response.url)
         return response
 
     @contextmanager
@@ -164,7 +295,9 @@ class SourceContext:
         with self.page() as page:
             page.goto(url, wait_until='domcontentloaded', timeout=self.timeout * 1000)
             page.locator(selector).first.wait_for(timeout=self.timeout * 1000)
-            return BeautifulSoup(page.content(), 'html.parser')
+            soup = BeautifulSoup(page.content(), 'html.parser')
+            self.capture_entry(''.join(str(el) for el in soup.select(selector)), page.url)
+            return soup
 
     def audio_language(self, provider):
         if provider == 'lexin':
@@ -189,6 +322,8 @@ class SourceContext:
     def register_media(self, path):
         path = Path(path).resolve()
         self.media.add(path)
+        if self.cache_capture is not None:
+            self.cache_capture['media'].add(path)
         destination = self.config.data.get('media', {}).get('anki_directory',
                       self.config.section('audio').get('copy_to', ''))
         if destination:
@@ -211,10 +346,17 @@ class SourceContext:
         return ''
 
     def table_audio_fallback(self, form, language):
-        from exercises import exercise_audio
+        from app.exercises import exercise_audio
         return exercise_audio(form, language, self)
 
+    def cached_table_audio_fallback(self, form, language):
+        from app.exercises import cached_exercise_audio
+        return cached_exercise_audio(form, language, self)
+
     def lexin(self, word, number, audio=False):
+        return self.cache_result('lexin', word, lambda: self._lexin(word, number, audio), audio)
+
+    def _lexin(self, word, number, audio=False):
         if audio:
             self.lexin_audio_attempted.add(word)
         cached = self.cached_audio(word, 'lexin') if audio else ''
@@ -235,7 +377,9 @@ class SourceContext:
                                  self.config.section('sources').get('lexin', {}).get('table_audio', False)),
                     on_table_media=self.register_audio,
                     audio_cache=self.config.section('audio')['cache'],
-                    table_fallback=self.table_audio_fallback)
+                    table_fallback=self.table_audio_fallback,
+                    table_cached_fallback=self.cached_table_audio_fallback,
+                    on_entry=lambda markup: self.capture_entry(markup, page.url))
             contents.append(content)
             sound = selected_sound or sound
         content = ''.join(contents)
@@ -257,12 +401,20 @@ class SourceContext:
 
 
 def dictionary_content(name, word, number, ctx):
+    if name == 'lexin':
+        return _dictionary_content(name, word, number, ctx)
+    if isinstance(ctx, SourceContext):
+        return ctx.cache_result(name, word, lambda: _dictionary_content(name, word, number, ctx))
+    return _dictionary_content(name, word, number, ctx)
+
+
+def _dictionary_content(name, word, number, ctx):
     encoded = quote(word, safe='')
     if name in ('bokmalsordboka', 'nynorskordboka'):
-        from ordbokene_scraper import ordbokene_content
+        from app.ordbokene_scraper import ordbokene_content
         return block(name, ordbokene_content(word, 'bm' if name == 'bokmalsordboka' else 'nn', ctx))
     if name == 'oxford':
-        from oxford_scraper import oxford_content
+        from app.oxford_scraper import oxford_content
         return block(name, oxford_content(word, ctx))
     if name == 'lexin':
         priority = ctx.config.section('audio')['priority']
@@ -281,6 +433,7 @@ def dictionary_content(name, word, number, ctx):
                                                params={'sl': ctx.language, 'tl': target, 'q': word}, timeout=ctx.timeout)
                     response.raise_for_status()
                     soup = BeautifulSoup(response.text, 'html.parser')
+                    ctx.capture_entry(response.text, response.url)
                     element = soup.select_one('.result-container, .t0')
                     translated = element.get_text(strip=True) if element else ''
                 if not translated:
@@ -364,7 +517,7 @@ def dictionary_content(name, word, number, ctx):
             return block(name, ''.join(pieces))
         return block(name, ''.join(str(el) for el in soup.select(selector)))
     if name == 'images':
-        from image_sources import download_images
+        from app.image_sources import download_images
         return block(name, download_images(word, ctx))
     raise ValueError(f'No adapter for {name}')
 

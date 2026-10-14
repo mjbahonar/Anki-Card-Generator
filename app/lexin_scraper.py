@@ -78,7 +78,7 @@ def save_lexin_audio(response, word, audio_directory=None, copy_to=None, languag
                              (data[0] == 0xff and data[1] & 0xe0 == 0xe0)):
         raise ValueError('Pronunciation response is not an MP3')
     filename = audio_filename(word, provider, language)
-    audio_dir = Path(audio_directory) if audio_directory else Path(__file__).resolve().parent / 'Audio'
+    audio_dir = Path(audio_directory) if audio_directory else Path(__file__).resolve().parents[1] / 'Audio'
     audio_dir.mkdir(parents=True, exist_ok=True)
     local_path = audio_dir / filename
     local_path.write_bytes(data)
@@ -95,9 +95,10 @@ def save_lexin_audio(response, word, audio_directory=None, copy_to=None, languag
 
 
 def download_table_audio(entry, page, audio_directory, language, timeout_ms, on_error=None,
-                         on_media=None, cache=True, fallback=None):
+                         on_media=None, cache=True, fallback=None, cached_fallback=None, native_state=None):
     """Only the exact entry's desktop inflection controls; repeated forms share media."""
     sounds = {}
+    native_state = native_state if native_state is not None else {'unavailable': False}
     entry.locator('details').evaluate_all('(nodes) => nodes.forEach(node => node.open = true)')
     buttons = entry.locator('.ordbank-table.desktop td .tts-btn')
     for index in range(buttons.count()):
@@ -106,16 +107,32 @@ def download_table_audio(entry, page, audio_directory, language, timeout_ms, on_
         key = normalize_headword(form)
         if not key or key in sounds:
             continue
-        directory = Path(audio_directory) if audio_directory else Path(__file__).resolve().parent / 'Audio'
+        directory = Path(audio_directory) if audio_directory else Path(__file__).resolve().parents[1] / 'Audio'
         path = directory / audio_filename(form, 'lexin_table', language)
         try:
             data = path.read_bytes() if cache and path.is_file() else b''
             valid = len(data) >= 128 and (data.startswith(b'ID3') or (data[0] == 255 and data[1] & 224 == 224))
+            if not valid and cache and cached_fallback:
+                cached_sound = cached_fallback(form, language)
+                if cached_sound:
+                    sounds[key] = cached_sound[7:-1]
+                    continue
             if not valid:
-                with page.expect_response(lambda response: '.mp3' in response.url.lower() and 'leseweb.dk/' in response.url,
-                                          timeout=min(3000, timeout_ms())) as pending:
-                    button.click(timeout=min(3000, timeout_ms()))
-                save_lexin_audio(pending.value, form, directory, '', language, 'lexin_table')
+                if native_state['unavailable'] and fallback:
+                    fallback_sound = fallback(form, language)
+                    sounds[key] = fallback_sound[7:-1]
+                    continue
+                try:
+                    # Once this word's table service fails, avoid repeating a timeout
+                    # for every remaining form. Original cached files still take priority.
+                    wait = min(1500 if fallback else 3000, timeout_ms())
+                    with page.expect_response(lambda response: '.mp3' in response.url.lower() and 'leseweb.dk/' in response.url,
+                                              timeout=wait) as pending:
+                        button.click(timeout=wait)
+                    save_lexin_audio(pending.value, form, directory, '', language, 'lexin_table')
+                except Exception:
+                    native_state['unavailable'] = True
+                    raise
             if on_media:
                 on_media(path)
             sounds[key] = path.name
@@ -134,8 +151,9 @@ def download_table_audio(entry, page, audio_directory, language, timeout_ms, on_
 def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
                              verbose=True, on_error=None, remaining_timeout=None, variant='bokmal',
-                             table_audio=False, on_table_media=None, audio_cache=True, table_fallback=None):
-    """Return (full first exact entry HTML, sound tag); audio failure keeps the entry."""
+                             table_audio=False, on_table_media=None, audio_cache=True, table_fallback=None, on_entry=None,
+                             table_cached_fallback=None):
+    """Inspect only the first two results; return exact matches and one headword sound."""
     def log(message):
         if verbose:
             print(message)
@@ -148,60 +166,62 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
     language = 'nn' if variant == 'nynorsk' else 'nb'
     lemma_selector = f'dd[data-type="LEM"][lang="{language}"]'
     log(f'[LEXIN] ({word_number}) {word}')
-    entry_html = ''
+    contents, seen_entries = [], set()
     sound_tag = ''
     try:
         page.goto(f'https://lexin.oslomet.no/#/findwords/message.{variant}-english?q=' + quote(str(word), safe=''),
                   wait_until='domcontentloaded', timeout=timeout_ms())
         page.locator('.search-table ' + lemma_selector).first.wait_for(timeout=timeout_ms())
+        audio_attempted = False
+        table_native_state = {'unavailable': False}
         entries = page.locator('ul.search-table')
-        entry = None
-        for index in range(entries.count()):
+        for index in range(min(2, entries.count())):
             page.set_default_timeout(timeout_ms())
-            candidate = entries.nth(index)
-            lemmas = candidate.locator(lemma_selector)
+            entry = entries.nth(index)
+            lemmas = entry.locator(lemma_selector)
             if not lemmas.count():
                 continue
             lemma = lemmas.first
             forms = lemma.locator('.grunnform')
             texts = forms.all_text_contents() if forms.count() else [lemma.inner_text()]
-            if any(normalize_headword(text) == normalize_headword(str(word)) for text in texts):
-                entry = candidate
-                break
-        if entry is None:
+            if not any(normalize_headword(text) == normalize_headword(str(word)) for text in texts):
+                continue
+            markup = entry.inner_html()
+            rendered = render_lexin_entry(markup, variant)
+            if rendered in seen_entries:
+                continue
+            seen_entries.add(rendered)
+            # Keep valid text even if audio subsequently fails.
+            contents.append(rendered)
+            if on_entry:
+                on_entry('<ul class="search-table">' + markup + '</ul>')
+            if download_audio and not audio_attempted:
+                audio_attempted = True
+                button = lemma.locator('.tts-btn').first
+                for form_index in range(forms.count()):
+                    if normalize_headword(forms.nth(form_index).inner_text()) == normalize_headword(str(word)):
+                        button = forms.nth(form_index).locator('xpath=..').locator('.tts-btn').first
+                        break
+                try:
+                    with page.expect_response(lambda r: '.mp3' in r.url.lower() and 'leseweb.dk/' in r.url,
+                                              timeout=timeout_ms()) as pending:
+                        button.click(timeout=min(5000, timeout_ms()))
+                    sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to,
+                                                'nn' if variant == 'nynorsk' else 'no')
+                except Exception as exc:
+                    if on_error:
+                        on_error('lexin_audio', exc)
+                    log(f'[LEXIN] Pronunciation unavailable: {exc}')
+            if table_audio:
+                sounds = download_table_audio(entry, page, audio_directory,
+                                              'nn' if variant == 'nynorsk' else 'no', timeout_ms,
+                                              on_error, on_table_media, audio_cache, table_fallback,
+                                              cached_fallback=table_cached_fallback, native_state=table_native_state)
+                contents[-1] = render_lexin_entry(entry.inner_html(), variant, sounds)
+        if not contents:
             log(f'[LEXIN] No exact headword for {word!r}')
-            return '', ''
-        entry_html = render_lexin_entry(entry.inner_html(), variant)
-        def render_with_table_audio():
-            if not table_audio:
-                return render_lexin_entry(entry.inner_html(), variant)
-            sounds = download_table_audio(entry, page, audio_directory,
-                                          'nn' if variant == 'nynorsk' else 'no', timeout_ms,
-                                          on_error, on_table_media, audio_cache, table_fallback)
-            return render_lexin_entry(entry.inner_html(), variant, sounds)
-        if not download_audio:
-            return render_with_table_audio(), ''
-        lemma = entry.locator(lemma_selector).first
-        forms = lemma.locator('.grunnform')
-        button = lemma.locator('.tts-btn').first
-        for index in range(forms.count()):
-            if normalize_headword(forms.nth(index).inner_text()) == normalize_headword(str(word)):
-                button = forms.nth(index).locator('xpath=..').locator('.tts-btn').first
-                break
-        try:
-            # Leseweb generates a playlist, then an MP3 after the headword button is clicked.
-            with page.expect_response(lambda r: '.mp3' in r.url.lower() and 'leseweb.dk/' in r.url,
-                                      timeout=timeout_ms()) as pending:
-                button.click(timeout=min(5000, timeout_ms()))
-            sound_tag = save_lexin_audio(pending.value, word, audio_directory, copy_to,
-                                         'nn' if variant == 'nynorsk' else 'no')
-        except Exception as exc:
-            if on_error:
-                on_error('lexin_audio', exc)
-            log(f'[LEXIN] Pronunciation unavailable: {exc}')
-        entry_html = render_with_table_audio()
     except Exception as exc:
         if on_error:
             on_error('lexin', exc)
         log(f'[LEXIN] Search failed for {word!r}: {exc}')
-    return entry_html, sound_tag
+    return ''.join(contents), sound_tag
