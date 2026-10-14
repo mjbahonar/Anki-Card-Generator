@@ -30,6 +30,10 @@ python main.py
 
 Copy the supplied `Template.xlsx` to `Input.xlsx`, then enter data below the first-row headers: **Word | Type | Tag | Answer | Meaning**. The distributed config uses `header = true` and the first worksheet. Leave Type blank for normal vocabulary; the dropdown also offers type, listen, sentence and gap. The template's second sheet is a quick reference; for listen, Word is the text spoken in the practice answer language and Answer is an optional translation, and gap requires one answer per blank in column D. Existing headerless workbooks remain supported with `header = false`. The default settings enable only Lexin Bokmål–English. All other source sections remain available with enabled = false. Source failures are reported while available results are saved.
 
+![Sketch of simple one-column Excel input and optional Word, Type, Tag, Answer and Meaning columns](docs/images/excel-input-guide.png)
+
+A single Word column is enough for normal vocabulary cards; add the other columns when you want exercises, tags or personal meanings. The German, Norwegian and French examples illustrate the layout. Set the dictionary and practice languages in `config.toml` for your own input; languages are not detected per row.
+
 Generated files appear in `Output`. Start with `input.max_words = 3` for a small trial; set it to `0` to process the entire list.
 
 ## All user settings are in config.toml
@@ -157,7 +161,6 @@ Each word shows `OK`, `EMPTY` or `FAIL` for each source, its elapsed time and au
 
 Lexin supports `variant = "bokmal"`, `"nynorsk"` or `"both"` in `[sources.lexin]`. With no variant, `nn` input uses Nynorsk and other Norwegian input uses Bokmål. Both entries share the existing Lexin field, preserving the Anki schema and note identity. Audio follows the input variety (or Nynorsk when explicitly selected).
 
-
 ### Mixed exercise cards
 
 Excel may contain five adjacent columns starting at `input.word_column`: **input | type | tags | answer | meaning**. Existing one-column and four-column workbooks continue to work; blank type means `normal`. Type names are case-insensitive. Comma-separated input tags are merged with the automatic type tag; whitespace within a tag becomes an underscore. Each `[cards.<type>]` section allows editing `title`, `instruction`, `tag`, and `audio`. Leave the normal title/instruction blank to retain the vocabulary front.
@@ -195,7 +198,6 @@ Multi-blank `gap` exercises stay on one card. Put each answer on its own line in
 Gap fronts now have one editable input per blank (including Preview); grading remains manual for the entire exercise. The native `type` comparison input appears during actual Anki review, not in Anki’s Preview dialog. Re-run and import the new APKG to update existing templates/content.
 
 **AnkiDroid keyboard:** If tapping a gap input focuses it but does not open the keyboard, enable **Settings → Advanced → Workarounds → Type answer into the card**, then leave and reopen the review screen. This setting resolved the issue on a tested Android device. The option's location/name may vary by AnkiDroid version. See the [AnkiDroid manual](https://docs.ankidroid.org/#_workarounds).
-
 
 Set `[sources.lexin] table_audio = true` to include pronunciation controls only for inflection-table forms in the exact Lexin entry. The global audio switch also applies. Files are cached and bundled; table controls do not autoplay. Set it to false for text-only tables. Additional network work shares the source time budget; increase it for large tables. Example/idiom pronunciation is excluded.
 
