@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sqlite3
 import tempfile
+import time
 import tomllib
 import unittest
 from unittest.mock import Mock, patch
@@ -470,6 +471,83 @@ class V4Tests(unittest.TestCase):
         self.assertIn('a building', result)
         self.assertIn('an example', result)
         self.assertNotIn('SMART Vocabulary', result)
+
+    def fake_playwright(self, launch):
+        class LaunchTimeout(Exception):
+            pass
+        browser = Mock()
+        driver = Mock()
+        driver.chromium.launch = Mock(side_effect=lambda **kwargs: launch(LaunchTimeout) or browser)
+        module = Mock(sync_playwright=Mock(return_value=Mock(start=Mock(return_value=driver))),
+                      TimeoutError=LaunchTimeout)
+        return patch.dict('sys.modules', {'playwright': Mock(), 'playwright.sync_api': module}), driver
+
+    def test_browser_launch_timeout_is_retried_by_the_next_source(self):
+        attempts = []
+        def launch(timeout_class):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise timeout_class('cold start')
+        modules, driver = self.fake_playwright(launch)
+        context = SourceContext(self.config)
+        with modules:
+            context.source_deadline = time.monotonic() - 1
+            with self.assertRaises(TimeoutError):
+                with context.page():
+                    pass
+            context.source_deadline = None
+            with self.assertRaises(TimeoutError):
+                with context.page():
+                    pass
+            with context.page() as page:
+                self.assertIsNotNone(page)
+        self.assertIsNone(context.browser_error)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(driver.chromium.launch.call_count, 2)
+
+    def test_missing_browser_is_reported_once_without_relaunching(self):
+        def launch(timeout_class):
+            raise RuntimeError('Executable does not exist')
+        modules, driver = self.fake_playwright(launch)
+        context = SourceContext(self.config)
+        with modules:
+            for _ in range(2):
+                with self.assertRaisesRegex(RuntimeError, 'playwright install chromium'):
+                    with context.page():
+                        pass
+        self.assertEqual(driver.chromium.launch.call_count, 1)
+
+    def test_failed_import_csv_leaves_no_temporary_file(self):
+        self.config.section('output')['formats'] = ['csv']
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        def broken(rows, path, config):
+            path.write_text('partial', encoding='utf-8')
+            raise OSError('disk full')
+        with patch('main.write_import_csv', side_effect=broken), redirect_stdout(io.StringIO()):
+            _, failures = export_outputs([{'Words': 'bok'}], self.config, 'test', context)
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(list(self.directory.glob('*.tmp.*')), [])
+
+    def test_normal_card_audio_runs_inside_the_source_time_budget(self):
+        self.config.section('output')['formats'] = ['json']
+        deadlines = []
+        def audio(word, number, context):
+            deadlines.append(context.source_deadline)
+            return ''
+        with patch('main.dictionary_content', return_value='<div>x</div>'), \
+             patch('main.select_audio', side_effect=audio), redirect_stdout(io.StringIO()):
+            run(self.config)
+        self.assertEqual(len(deadlines), 2)
+        self.assertTrue(all(deadline is not None for deadline in deadlines))
+
+    def test_unknown_section_error_names_only_the_unknown_section(self):
+        path = self.directory / 'config.toml'
+        path.write_text((ROOT / 'config.toml').read_text(encoding='utf-8') + '\n[typo_section]\nvalue = 1\n',
+                        encoding='utf-8')
+        with self.assertRaisesRegex(ConfigError, 'typo_section') as raised:
+            load_config(path)
+        self.assertNotIn('practice', str(raised.exception))
 
 
 if __name__ == '__main__':

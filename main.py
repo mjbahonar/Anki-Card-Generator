@@ -56,6 +56,7 @@ def export_outputs(rows, config, stem, context, recovery=False):
     paths, failures = [], []
     for format_name in formats:
         path, temporary = output / f'{stem}.{format_name}', output / f'{stem}.tmp.{format_name}'
+        import_temp = output / f'{stem}_anki.tmp.csv'
         try:
             output.mkdir(parents=True, exist_ok=True)
             if format_name == 'csv':
@@ -74,7 +75,6 @@ def export_outputs(rows, config, stem, context, recovery=False):
             paths.append(path)
             if format_name == 'csv' and not recovery:
                 import_path = output / f'{stem}_anki.csv'
-                import_temp = output / f'{stem}_anki.tmp.csv'
                 write_import_csv(rows, import_temp, config)
                 import_temp.replace(import_path)
                 paths.append(import_path)
@@ -82,11 +82,12 @@ def export_outputs(rows, config, stem, context, recovery=False):
             failures.append(f'{format_name}: {exc}')
             print(f'  FAIL export {format_name}: {concise(exc)}', flush=True)
         finally:
-            if temporary.exists():
-                try:
-                    temporary.unlink()
-                except OSError:
-                    pass
+            for leftover in (temporary, import_temp):
+                if leftover.exists():
+                    try:
+                        leftover.unlink()
+                    except OSError:
+                        pass
     return paths, failures
 
 
@@ -176,7 +177,8 @@ def run(config, context_factory=SourceContext):
                         report.source(name, 'FAIL', started, context.errors[-1]['message'])
                 previous = len(context.errors)
                 try:
-                    row['Sound'] = select_audio(word, number, context) if options(config, 'normal')['audio'] else ''
+                    with context.source_budget():
+                        row['Sound'] = select_audio(word, number, context) if options(config, 'normal')['audio'] else ''
                 except Exception as exc:
                     context.issue(word, 'audio', exc)
                     row['Sound'] = ''

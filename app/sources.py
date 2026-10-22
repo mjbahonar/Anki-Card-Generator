@@ -264,7 +264,9 @@ class SourceContext:
         response = self.session.get(url, timeout=self.timeout)
         response.raise_for_status()
         self.check_budget()
-        if (self.cache_capture is not None and self.cache_capture['source'] != 'oxford'
+        # Oxford captures its entry itself; images archive only the chosen files,
+        # never every thumbnail on a search results page.
+        if (self.cache_capture is not None and self.cache_capture['source'] not in ('oxford', 'images')
                 and 'html' in response.headers.get('Content-Type', '')):
             soup = BeautifulSoup(response.text, 'html.parser')
             entries = soup.select('.entry, section.results__container, .container.mt-2, #id-sec-entry-group-dcom, section.synonym-antonym-panel')
@@ -276,11 +278,21 @@ class SourceContext:
         if self.browser_error:
             raise RuntimeError(self.browser_error)
         if self.browser is None:
+            # An expired source budget belongs to this source, not the browser.
+            timeout = self.timeout
             try:
-                from playwright.sync_api import sync_playwright
-                self.playwright = sync_playwright().start()
+                from playwright.sync_api import sync_playwright, TimeoutError as LaunchTimeout
+            except Exception as exc:
+                self.browser_error = f'Browser unavailable; run pip install -r requirements.txt. {exc}'
+                raise RuntimeError(self.browser_error) from exc
+            try:
+                if self.playwright is None:
+                    self.playwright = sync_playwright().start()
                 self.browser = self.playwright.chromium.launch(
-                    headless=self.config.section('runtime')['headless'], timeout=self.timeout * 1000)
+                    headless=self.config.section('runtime')['headless'], timeout=timeout * 1000)
+            except LaunchTimeout as exc:
+                # A slow cold start must not disable every later browser source.
+                raise TimeoutError(f'Browser launch timed out: {exc}') from exc
             except Exception as exc:
                 self.browser_error = f'Browser unavailable; run python -m playwright install chromium. {exc}'
                 raise RuntimeError(self.browser_error) from exc
@@ -433,8 +445,9 @@ def _dictionary_content(name, word, number, ctx):
                                                params={'sl': ctx.language, 'tl': target, 'q': word}, timeout=ctx.timeout)
                     response.raise_for_status()
                     soup = BeautifulSoup(response.text, 'html.parser')
-                    ctx.capture_entry(response.text, response.url)
                     element = soup.select_one('.result-container, .t0')
+                    if element:
+                        ctx.capture_entry(str(element), response.url)
                     translated = element.get_text(strip=True) if element else ''
                 if not translated:
                     raise ValueError('Empty translation')

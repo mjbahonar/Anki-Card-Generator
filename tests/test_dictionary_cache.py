@@ -2,6 +2,7 @@
 import copy
 from contextlib import closing
 from io import BytesIO
+import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -435,6 +436,33 @@ class CacheTests(unittest.TestCase):
         self.assertIsNone(ctx.dictionary_cache.get(key, ctx))
         ctx.dictionary_cache.put(key, 'oxford', 'book', 'definition', '', [], [(media, 'audio')])
         self.assertEqual(ctx.dictionary_cache.get(key, ctx)[0], 'definition')
+
+    def test_google_image_results_page_thumbnails_are_not_downloaded_for_archive(self):
+        ctx = self.context()
+        ctx.config.data['sources']['images'] = {'enabled': True, 'count': 1, 'priority': ['google']}
+        image = BytesIO()
+        Image.new('RGB', (100, 100), 'red').save(image, format='PNG')
+        results = ''.join(f'<img src="https://images.example/{i}.png">' for i in range(20))
+        def get(url, **kwargs):
+            if 'google.com/search' in url:
+                return Mock(url=url, text=results, headers={'Content-Type': 'text/html'})
+            return Mock(url=url, content=image.getvalue(), headers={'Content-Type': 'image/png'})
+        ctx.session.get = Mock(side_effect=get)
+        dictionary_content('images', 'apple', 1, ctx)
+        self.assertEqual(ctx.session.get.call_count, 2)
+        with closing(sqlite3.connect(ctx.dictionary_cache.path)) as db:
+            documents = json.loads(db.execute('SELECT documents FROM results').fetchone()[0])
+        self.assertEqual([document['url'] for document in documents], ['https://images.example/0.png'])
+
+    def test_translation_archives_only_the_result_without_page_images(self):
+        ctx = self.context()
+        page = '<img src="https://translate.example/logo.png"><div class="result-container">book</div>'
+        ctx.session.get = Mock(return_value=Mock(url='https://translate.google.com/m', text=page))
+        self.assertIn('book', dictionary_content('google_translate', 'bok', 1, ctx))
+        self.assertEqual(ctx.session.get.call_count, 1)
+        with closing(sqlite3.connect(ctx.dictionary_cache.path)) as db:
+            documents = json.loads(db.execute('SELECT documents FROM results').fetchone()[0])
+        self.assertEqual([document['html'] for document in documents], ['<div class="result-container">book</div>'])
 
 
 if __name__ == '__main__':

@@ -68,8 +68,9 @@ def load_config(path):
     meaning = data.setdefault('meaning', {'enabled': True})
     if not isinstance(meaning, dict) or set(meaning) - {'enabled'} or type(meaning.get('enabled', True)) is not bool:
         raise ConfigError('meaning.enabled must be true or false')
-    if set(data) - set(required) - {'practice', 'cards', 'media', 'dictionary_cache', 'meaning'}:
-        raise ConfigError(f'Unknown configuration section: {set(data) - set(required)}')
+    unknown = set(data) - set(required) - {'practice', 'cards', 'media', 'dictionary_cache', 'meaning'}
+    if unknown:
+        raise ConfigError(f'Unknown configuration section: {unknown}')
     from app.exercises import validate_cards
     validate_cards(data)
     if data['input'].get('order', 'excel') not in ('excel', 'random'):
