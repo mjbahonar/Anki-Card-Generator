@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
 import html
+import re
 import hashlib
 from io import BytesIO
 from pathlib import Path
@@ -49,12 +50,12 @@ def supported(name, language):
     return not SOURCE_SPECS[name].languages or language in SOURCE_SPECS[name].languages
 
 
-def clean_html(markup):
+def clean_html(markup, extra_tags=(), extra_attributes=()):
     soup = BeautifulSoup(str(markup), 'html.parser')
     for tag in soup.select('script, style, iframe, svg, button, input, form, link, audio, mtab, .ex-tooltip'):
         tag.decompose()
     allowed = {'div', 'span', 'p', 'br', 'hr', 'b', 'strong', 'em', 'i', 'ul', 'ol', 'li',
-               'dl', 'dt', 'dd', 'table', 'caption', 'thead', 'tbody', 'tr', 'td', 'th', 'h2', 'h3', 'h4', 'sup', 'sub', 'img', 'a'}
+               'dl', 'dt', 'dd', 'table', 'caption', 'thead', 'tbody', 'tr', 'td', 'th', 'h2', 'h3', 'h4', 'sup', 'sub', 'img', 'a'} | set(extra_tags)
     for tag in list(soup.find_all(True)):
         if tag.name == 'sense':
             tag.name = 'div'
@@ -62,10 +63,13 @@ def clean_html(markup):
         if tag.name not in allowed:
             tag.unwrap()
             continue
-        tag.attrs = {k: v for k, v in tag.attrs.items() if k in {'class', 'lang', 'colspan', 'rowspan', 'src', 'alt', 'dir', 'href'}}
+        tag.attrs = {k: v for k, v in tag.attrs.items()
+                     if k in {'class', 'lang', 'colspan', 'rowspan', 'src', 'alt', 'dir', 'href', *extra_attributes}}
         if tag.name == 'a' and not str(tag.get('href', '')).startswith(('https://', 'http://')):
             tag.unwrap()
             continue
+        if re.search(r'url\s*\(|expression|@import|javascript:', str(tag.get('style', '')), re.I):
+            tag.attrs.pop('style')  # Inline styles may set colors/fonts, never load resources.
         if tag.get('dir') not in ('ltr', 'rtl', 'auto'):
             tag.attrs.pop('dir', None)
         if tag.name == 'img':
@@ -185,12 +189,13 @@ class SourceContext:
         try:
             cached = (None if self.config.data.get('dictionary_cache', {}).get('refresh', False)
                       else self.dictionary_cache.get(key, self))
-            if (cached is None and name == 'lexin'
+            if (cached is None and name == 'lexin' and self.config.section('sources').get('lexin', {}).get('entries', 2) == 1
                     and not self.config.data.get('dictionary_cache', {}).get('refresh', False)):
-                # Preserve valid pre-multiple-entry caches; clear a word explicitly to update it.
+                # Pre-multiple-entry caches hold one entry, so they only satisfy entries = 1.
                 import json
                 legacy = json.loads(key)
                 legacy[3].pop('adapter_revision', None)
+                legacy[3].pop('entries', None)
                 legacy_key = json.dumps(legacy, sort_keys=True, ensure_ascii=False)
                 cached = self.dictionary_cache.get(legacy_key, self)
         except (OSError, ValueError, sqlite3.Error) as exc:
@@ -391,7 +396,8 @@ class SourceContext:
                     audio_cache=self.config.section('audio')['cache'],
                     table_fallback=self.table_audio_fallback,
                     table_cached_fallback=self.cached_table_audio_fallback,
-                    on_entry=lambda markup: self.capture_entry(markup, page.url))
+                    on_entry=lambda markup: self.capture_entry(markup, page.url),
+                    max_entries=self.config.section('sources').get('lexin', {}).get('entries', 2))
             contents.append(content)
             sound = selected_sound or sound
         content = ''.join(contents)
@@ -429,7 +435,7 @@ def _dictionary_content(name, word, number, ctx):
         from app.oxford_scraper import oxford_content
         return block(name, oxford_content(word, ctx))
     if name == 'lexin':
-        priority = ctx.config.section('audio')['priority']
+        priority = word_audio_priority(ctx.config)
         audio = (ctx.config.section('audio')['enabled'] and priority and priority[0] == 'lexin'
                  and ctx.config.data.get('cards', {}).get('normal', {}).get('audio', True))
         return ctx.lexin(word, number, audio=audio)
@@ -535,10 +541,20 @@ def _dictionary_content(name, word, number, ctx):
     raise ValueError(f'No adapter for {name}')
 
 
+def word_audio_priority(config):
+    """Headword audio providers for language.source; unlisted languages use audio.priority."""
+    audio, language = config.section('audio'), config.section('language')['source']
+    table = audio.get('word', {})
+    for code in (language, 'no' if language in ('nb', 'nn') else None):
+        if code in table:
+            return table[code]
+    return audio['priority']
+
+
 def select_audio(word, number, ctx):
     if not ctx.config.section('audio')['enabled']:
         return ''
-    for provider in ctx.config.section('audio')['priority']:
+    for provider in word_audio_priority(ctx.config):
         if provider == 'lexin' and ctx.language not in ['no', 'nb', 'nn']:
             continue
         if provider == 'fastdic' and ctx.language != 'en':

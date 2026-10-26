@@ -10,7 +10,9 @@ from app.lexin_scraper import normalize_headword
 def cache_key(name, word, config, audio=False):
     settings = {k: v for k, v in config.data['sources'].get(name, {}).items() if k != 'enabled'}
     if name == 'lexin':
-        settings['adapter_revision'] = 2  # Multiple exact entries; legacy keys remain readable.
+        settings['adapter_revision'] = 2  # Multiple exact entries; legacy keys serve entries = 1 only.
+        if settings.get('entries', 2) == 2:
+            settings.pop('entries', None)  # Revision 2 always inspected two results.
         settings.setdefault('variant', 'nynorsk' if config.data['language']['source'] == 'nn' else 'bokmal')
         settings['headword_audio'] = bool(audio)
         settings['table_audio'] = bool(settings.get('table_audio', False) and config.data['audio']['enabled']

@@ -15,7 +15,7 @@ from app.console_report import ConsoleReport, concise
 from app.exercises import read_records, options, language_settings, exercise_audio, render_exercise, direction, complete_gap
 from app.anki_exporter import write_import_csv
 
-VERSION = '5.3.0'
+VERSION = '5.4.0'
 
 
 def read_words(config):
@@ -91,6 +91,14 @@ def export_outputs(rows, config, stem, context, recovery=False):
     return paths, failures
 
 
+def output_stem(config, now=None):
+    """Input workbook name first, then the prefix and timestamp."""
+    import re
+    source = re.sub(r'[^\w-]+', '_', config.resolve(config.section('input')['file']).stem).strip('_') or 'input'
+    stamp = (now or datetime.now()).strftime('%Y-%m-%d_%H-%M-%S_%f')
+    return f"{source}_{config.section('output')['filename_prefix']}_{stamp}"
+
+
 def run(config, context_factory=SourceContext):
     records, input_skips = read_records(config)
     words, active = [record['Words'] for record in records], display_sources(config)
@@ -104,7 +112,7 @@ def run(config, context_factory=SourceContext):
     print(f'Source time budget: {limit}s' if limit else 'Source time budget: disabled', flush=True)
     if skipped:
         print('Skipped sources incompatible with this language: ' + ', '.join(skipped), flush=True)
-    stem = config.section('output')['filename_prefix'] + '_' + datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')
+    stem = output_stem(config)
     rows, context = [], context_factory(config)
     context.errors.extend(input_skips)
     report = ConsoleReport(active, len(words) + len(input_skips))

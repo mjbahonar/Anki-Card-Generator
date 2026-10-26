@@ -80,6 +80,17 @@ class LexinTests(unittest.TestCase):
         self.assertNotIn('present', content)
         error.assert_not_called()
 
+    def test_configured_entry_count_keeps_only_exact_matches_within_limit(self):
+        rows = [('reise', 'trip'), ('reise', 'travel'), ('reise', 'raise'), ('reisesyk', 'sick')]
+        page, _ = self.result_page([rows])
+        content, _ = scrape_and_process_lexin('reise', 1, page, download_audio=False, verbose=False, max_entries=4)
+        self.assertEqual(content.count('gt-container lexin-container'), 3)
+        self.assertNotIn('sick', content)
+        page, _ = self.result_page([rows])
+        content, _ = scrape_and_process_lexin('reise', 1, page, download_audio=False, verbose=False, max_entries=1)
+        self.assertIn('trip', content)
+        self.assertNotIn('travel', content)
+
     def test_table_audio_controls_are_inserted_only_for_table_forms(self):
         markup = '<div class="ordbank-table desktop"><table><tr><td><div><span>et hus</span><a class="tts-btn">Play</a></div></td></tr></table></div><p>et hus</p>'
         rendered = render_lexin_entry(markup, table_sounds={'et hus': 'table.mp3'})

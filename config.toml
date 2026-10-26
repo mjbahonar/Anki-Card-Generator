@@ -18,6 +18,7 @@ refresh = false                # true fetches again; set back to false for reuse
 # Optional personal meaning from the fifth Excel column, first on card backs.
 [meaning]
 enabled = true                 # false hides personal meanings for every card type
+html = false                   # true reads Meaning cells as HTML (tables, links, <br>); Excel formatting is then ignored
 
 # ======================================================================
 # 01. LANGUAGES
@@ -62,6 +63,7 @@ max_words = 0                  # 0 = all valid records
 enabled = true
 variant = "bokmal"             # bokmal, nynorsk or both
 table_audio = true             # Inflection-table pronunciation only; click to play
+entries = 2                    # First N Lexin results checked; exact headword matches only
 
 # Additional sources: set enabled = true to use one; sections define display order.
 [sources.bokmalsordboka]
@@ -105,7 +107,7 @@ count = 2
 priority = ["google", "commons"] # Use ["commons"] to skip Google
 
 [sources.oxford]
-enabled = false                # English definitions; audio still uses audio.priority
+enabled = false                # English definitions; audio still uses [audio.word]
 examples_per_definition = 3
 
 # ======================================================================
@@ -152,16 +154,24 @@ audio = true                   # Front audio; no audio -> skip this card
 # ======================================================================
 # 05. AUDIO
 # ======================================================================
-# Normal cards: Lexin headword audio, then gTTS if unavailable.
+# Normal cards: headword audio from [audio.word] for language.source.
+# Providers: lexin (Norwegian), fastdic (English), google_tts (any language).
+# The first provider that succeeds is used. [] disables headword audio.
+# cards.normal.audio = false also turns headword audio off.
 # Exercise cards: gTTS in practice.answer_language.
 # nb/nn use generic Norwegian no for gTTS; no dedicated Nynorsk voice.
 # Automatic playback is controlled by Anki's review preferences.
 [audio]
 enabled = true
-priority = ["lexin", "google_tts"]
+priority = ["google_tts"]       # Languages not listed in [audio.word]
 directory = "Audio"
 cache = true
-english_accent = "us"          # Reserved for optional Fastdic audio
+english_accent = "us"          # Fastdic accent: us or uk
+
+[audio.word]                   # Headword audio source per input language
+no = ["lexin", "google_tts"]   # Also used for nb and nn
+en = ["fastdic", "google_tts"] # Example: ["google_tts"] or [] to disable
+fa = ["google_tts"]
 
 # ======================================================================
 # 06. OUTPUT AND ANKI DECK
@@ -169,7 +179,7 @@ english_accent = "us"          # Reserved for optional Fastdic audio
 [output]
 directory = "Output"
 formats = ["xlsx", "csv", "apkg", "html", "json"]
-filename_prefix = "words"
+filename_prefix = "words"      # Name: <input file>_<prefix>_<date-time>
 autosave_every = 5              # Recovery CSV after every 5 records; 0 disables
 
 [anki]

@@ -34,7 +34,7 @@ Relative paths are resolved from the configuration file's directory, regardless 
 
 ### Switching to English
 
-In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `oxford`, `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Set the audio priority to `["fastdic", "google_tts"]` if desired. Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the shared `model_id` can stay the same.
+In the same file, set `language.source = "en"`, select the desired input workbook, and enable sources such as `oxford`, `fastdic`, `cambridge`, `faraazin` or `b_amooz`. Headword audio follows `[audio.word]` for the input language (`en = ["fastdic", "google_tts"]` by default; `[]` disables it). Lexin is automatically skipped for English. To make a separate deck, set a different `deck_id` and `deck_name`; the shared `model_id` can stay the same.
 
 For example, change the existing settings to these values:
 
@@ -81,11 +81,11 @@ Oxford collects all available parts of speech for the exact headword. Bokmålsor
 
 ### Output and audio
 
-Choose any subset of `xlsx`, `csv`, `apkg`, `html` and `json`. The HTML preview includes playable audio. JSON includes source errors; a separate `*_errors.json` is written when issues occur. Recovery CSV files save progress every `autosave_every` words; set it to `0` to disable. Ctrl+C saves partial results.
+Choose any subset of `xlsx`, `csv`, `apkg`, `html` and `json`. Files are named `<input workbook>_<filename_prefix>_<date-time>`. The HTML preview includes playable audio. JSON includes source errors; a separate `*_errors.json` is written when issues occur. Recovery CSV files save progress every `autosave_every` words; set it to `0` to disable. Ctrl+C saves partial results.
 
 For example, `formats = ["apkg", "html"]` creates just an Anki package and a preview. The input filename, sheet and word column are independent of the chosen output formats.
 
-Only the input headword's pronunciation is downloaded. Provider priority is independent of the visible dictionary list. Norwegian defaults to Lexin with Google TTS fallback; English can use Fastdic with a selected US/UK accent and Google TTS fallback. Cached audio is reused. Anki packages include only referenced media and the font, rather than the entire media directory. Lexin/Google audio is synthesized speech.
+Only the input headword's pronunciation is downloaded. `[audio.word]` chooses providers per `language.source` (`lexin`, `fastdic`, `google_tts`; the first success wins, `[]` disables headword audio); `nb`/`nn` use the `no` list and unlisted languages use `audio.priority`. `cards.normal.audio = false` turns headword audio off for every language. Provider priority is independent of the visible dictionary list. Norwegian defaults to Lexin with Google TTS fallback; English defaults to Fastdic with a selected US/UK accent and Google TTS fallback. Cached audio is reused. Anki packages include only referenced media and the font, rather than the entire media directory. Lexin/Google audio is synthesized speech.
 
 ### Anki identity
 
@@ -116,6 +116,8 @@ Excel may contain five adjacent columns starting at `input.word_column`: **input
 The fifth column is an optional personal meaning for every card type. Non-empty text appears first in the answer section, under the exact heading `meaning`, before dictionary results or exercise answers; English Info stays last. Direct Excel text formatting, including rich-text bold/color and line breaks, is retained. Blank/missing meaning creates no section. It does not replace the Answer column or affect typing comparison, speech, dictionary caching or note identity. Existing Anki fields/model IDs are retained; rerun and import the APKG to update cards.
 
 Set `[meaning] enabled = false` in config.toml to hide personal meanings for every card type; `true` enables them (also the default for older configs). The Excel text remains intact. Regenerate and import the APKG after changing this option.
+
+Set `[meaning] html = true` to read Meaning cells as HTML, for example `<table><tr><td>et hus</td><td>huset</td></tr></table>`, `<a href="https://...">link</a>`, `<br>` or `<span style="color: red">`. Excel cell formatting is then ignored; use `<br>` for line breaks. Scripts, event handlers, iframes, forms, non-http(s) links and styles that load resources are removed. Images must be plain filenames already in Anki's media folder. `false` (default) shows tags as typed text.
 
 Excel font names include the bundled Vazirmatn fallback for devices without Windows fonts such as Calibri. A real Vazirmatn 700 bold face is included alongside the original regular font and packaged in APKG. This improves bold rendering on Android without depending on synthesized font weight. The open-source font and license come from [Vazirmatn's official repository](https://github.com/rastikerdar/vazirmatn). Import/sync the regenerated package and its media. Phone card zoom, OS text scaling and WebView fonts can still affect sizing and line wraps; desktop browser mobile emulation does not prove identical rendering on a physical phone.
 
@@ -148,6 +150,8 @@ Gap fronts now have one editable input per blank (including Preview); grading re
 **AnkiDroid keyboard:** If tapping a gap input focuses it but does not open the keyboard, enable **Settings → Advanced → Workarounds → Type answer into the card**, then leave and reopen the review screen. This setting resolved the issue on a tested Android device. The option's location/name may vary by AnkiDroid version. See the [AnkiDroid manual](https://docs.ankidroid.org/#_workarounds).
 
 ## Lexin table pronunciation
+
+`[sources.lexin] entries = 2` checks the first N Lexin results (1–10) and keeps those whose headword exactly matches the input, so homographs such as reise show both meanings. Older single-entry caches are reused only with `entries = 1`.
 
 Set `[sources.lexin] table_audio = true` to include pronunciation controls only for inflection-table forms in the exact Lexin entry. The global audio switch also applies. Files are cached and bundled; table controls do not autoplay. Set it to false for text-only tables. Additional network work shares the source time budget; increase it for large tables. Example/idiom pronunciation is excluded.
 

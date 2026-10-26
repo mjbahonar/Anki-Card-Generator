@@ -45,6 +45,8 @@ Edit the existing sections in **`config.toml`**:
 
 The distributed configuration enables only **Lexin Bokmål–English**. For English, set the source language to `en` and enable compatible sources such as Cambridge, Oxford or Fastdic. Changing the language does not enable dictionaries automatically.
 
+Tip: in VS Code, install the recommended **Even Better TOML** extension for colored, validated `config.toml` editing.
+
 **4. Generate and import**
 
 ```powershell
@@ -65,7 +67,7 @@ Each Excel row becomes one card. Leave `Type` blank for vocabulary, or choose an
 | `gap` | Fill one or more `[...]` blanks |
 | `listen` | Listen first, then reveal the text |
 
-`Tag` organizes cards, `Answer` supplies exercise answers, and `Meaning` adds an optional personal meaning. Set exercise languages in `[practice]`; see the [exercise rules](TECHNICAL.md#exercise-cards) for required answers and examples.
+`Tag` organizes cards, `Answer` supplies exercise answers, and `Meaning` adds an optional personal meaning (Excel formatting is kept; `[meaning] html = true` allows tables and links). Set exercise languages in `[practice]`; see the [exercise rules](TECHNICAL.md#exercise-cards) for required answers and examples.
 
 You can also enable images, select and reorder dictionaries, and export a playable HTML preview or spreadsheet reports. All everyday settings live in `config.toml`; launch with `main.py`.
 

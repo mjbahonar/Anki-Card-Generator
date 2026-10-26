@@ -102,6 +102,11 @@ class ExerciseTests(unittest.TestCase):
         self.assertEqual(first['Identity'], second['Identity'])
         self.assertNotEqual(first['Identity'], self.rendered('sentence')['Identity'])
 
+    def test_instruction_text_is_fixed_and_only_language_name_changes(self):
+        for code, name in [('no', 'Norwegian'), ('en', 'English'), ('fa', 'Persian')]:
+            self.config.data['practice']['answer_language'] = code
+            self.assertIn(f'Say this sentence in {name}.', self.rendered('sentence')['FrontField'])
+
     def test_persian_direction_language_and_front_does_not_leak_answer(self):
         self.config.data['practice']['answer_language'] = 'fa'
         row = self.rendered('type', answer='خانه')
@@ -221,7 +226,7 @@ class ExerciseTests(unittest.TestCase):
         with patch('main.dictionary_content') as dictionary, redirect_stdout(io.StringIO()):
             self.assertEqual(run(self.config), 0)
         dictionary.assert_not_called()
-        data = json.loads(next(p for p in self.directory.glob('words*.json') if not p.name.endswith('_errors.json')).read_text(encoding='utf-8'))
+        data = json.loads(next(p for p in self.directory.glob('input_words*.json') if not p.name.endswith('_errors.json')).read_text(encoding='utf-8'))
         self.assertEqual(len(data['words']), 1)
         self.assertEqual(len(data['errors']), 2)
         self.assertTrue(list(self.directory.glob('*_anki.csv')))
@@ -589,11 +594,27 @@ class ExerciseTests(unittest.TestCase):
             with patch('app.app_config.tomllib.load', return_value=data):
                 loaded = load_config(self.config.path)
             self.assertEqual(loaded.data['meaning']['enabled'], True if value is None else value['enabled'])
-        for value in ({'enabled': 'false'}, {'enabled': 0}, {'unknown': True}, 'yes'):
+        for value in ({'enabled': 'false'}, {'enabled': 0}, {'unknown': True}, {'html': 'yes'}, 'yes'):
             data = copy.deepcopy(self.config.data)
             data['meaning'] = value
             with patch('app.app_config.tomllib.load', return_value=data), self.assertRaises(ConfigError):
                 load_config(self.config.path)
+
+    def test_html_meaning_keeps_tables_links_and_styles_but_removes_unsafe_markup(self):
+        from app.exercises import meaning_html
+        cell = ('<table><tr><th>Form</th><td style="color: red">reiser</td></tr></table>'
+                '<a href="https://lexin.oslomet.no" onclick="bad()">Lexin</a><br><u>under</u>'
+                '<script>bad()</script><span style="background: url(https://x.test/a.png)">bg</span>'
+                '<a href="javascript:bad()">js</a><iframe src="https://x.test"></iframe>')
+        row = {'Meaning': cell}
+        self.config.data['meaning'] = {'enabled': True, 'html': True}
+        output = meaning_html(row, self.config)
+        for kept in ('<table>', '<th>Form</th>', 'style="color: red"', 'href="https://lexin.oslomet.no"', '<br/>', '<u>under</u>', '>js<'):
+            self.assertIn(kept, output)
+        for removed in ('onclick', '<script', 'url(', 'javascript:', '<iframe'):
+            self.assertNotIn(removed, output)
+        self.config.data['meaning']['html'] = False
+        self.assertIn('&lt;table&gt;', meaning_html(row, self.config))
 
     def test_distributed_template_has_five_headers_and_supports_all_card_types(self):
         import warnings

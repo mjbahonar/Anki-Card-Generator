@@ -379,7 +379,7 @@ class V4Tests(unittest.TestCase):
             return '<p>' + word + '</p>'
         with patch('main.dictionary_content', side_effect=adapter):
             self.assertEqual(run(self.config), 0)
-        report = json.loads(next(self.directory.glob('words_*.json')).read_text(encoding='utf-8'))
+        report = json.loads(next(self.directory.glob('input_words_*.json')).read_text(encoding='utf-8'))
         self.assertEqual(len(report['words']), 2)
         self.assertEqual(len(report['errors']), 2)
         self.assertTrue(all(r['dict_com'] for r in report['words']))
@@ -417,6 +417,45 @@ class V4Tests(unittest.TestCase):
             tts.return_value.write_to_fp.side_effect = lambda buffer: buffer.write(b'ID3' + b'y' * 200)
             self.assertIn('google_tts_en', select_audio('bok', 1, context2))
             tts.assert_called_once()
+
+    def test_word_audio_provider_is_chosen_per_input_language(self):
+        from app.sources import word_audio_priority
+        data = self.config.data
+        data['audio']['priority'] = ['google_tts']
+        data['audio']['word'] = {'no': ['lexin'], 'en': ['fastdic', 'google_tts'], 'fa': []}
+        for language, expected in [('no', ['lexin']), ('nb', ['lexin']), ('nn', ['lexin']),
+                                   ('en', ['fastdic', 'google_tts']), ('fa', []), ('de', ['google_tts'])]:
+            data['language']['source'] = language
+            self.assertEqual(word_audio_priority(self.config), expected)
+        data['language']['source'] = 'fa'
+        context = SourceContext(self.config)
+        self.addCleanup(context.close)
+        with patch('gtts.gTTS') as tts:
+            self.assertEqual(select_audio('kitab', 1, context), '')
+            tts.assert_not_called()
+        data['language']['source'] = 'en'
+        data['audio']['word']['en'] = ['google_tts']
+        english = SourceContext(self.config)
+        self.addCleanup(english.close)
+        with patch('gtts.gTTS') as tts, patch.object(english, 'fetch') as fetch:
+            tts.return_value.write_to_fp.side_effect = lambda buffer: buffer.write(b'ID3' + b'z' * 200)
+            self.assertIn('google_tts_en', select_audio('book', 1, english))
+            fetch.assert_not_called()
+
+    def test_config_validates_word_audio_lexin_entries_and_names_outputs_after_input(self):
+        from datetime import datetime
+        from main import output_stem
+        text = (ROOT / 'config.toml').read_text(encoding='utf-8')
+        path = self.directory / 'audio.toml'
+        for old, new, message in [('fa = ["google_tts"]', 'fa = ["forvo"]', 'audio.word.fa'),
+                                  ('entries = 2 ', 'entries = 0 ', 'entries')]:
+            with self.subTest(message=message):
+                path.write_text(text.replace(old, new), encoding='utf-8')
+                with self.assertRaisesRegex(ConfigError, message):
+                    load_config(path)
+        self.config.section('input')['file'] = 'Input Excels/My words.xlsx'
+        self.assertEqual(output_stem(self.config, datetime(2026, 10, 26, 9, 5, 1)),
+                         'My_words_' + self.config.section('output')['filename_prefix'] + '_2026-10-26_09-05-01_000000')
 
     def test_translation_timeout_retry_and_html_escape(self):
         context = SourceContext(self.config)

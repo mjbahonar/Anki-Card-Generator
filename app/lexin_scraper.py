@@ -152,8 +152,8 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
                              verbose=True, on_error=None, remaining_timeout=None, variant='bokmal',
                              table_audio=False, on_table_media=None, audio_cache=True, table_fallback=None, on_entry=None,
-                             table_cached_fallback=None):
-    """Inspect only the first two results; return exact matches and one headword sound."""
+                             table_cached_fallback=None, max_entries=2):
+    """Inspect only the first max_entries results; return exact matches and one headword sound."""
     def log(message):
         if verbose:
             print(message)
@@ -175,7 +175,7 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
         audio_attempted = False
         table_native_state = {'unavailable': False}
         entries = page.locator('ul.search-table')
-        for index in range(min(2, entries.count())):
+        for index in range(min(max_entries, entries.count())):
             page.set_default_timeout(timeout_ms())
             entry = entries.nth(index)
             lemmas = entry.locator(lemma_selector)

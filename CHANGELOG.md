@@ -1,5 +1,15 @@
 # Release notes
 
+## v5.4.0 — 2026-10-26
+
+- Output files now start with the input workbook name: `<input>_<filename_prefix>_<date-time>`.
+- Added `[audio.word]` to choose headword audio providers per input language (`lexin`, `fastdic`, `google_tts`); `[]` disables headword audio for that language. `nb`/`nn` use the `no` list and unlisted languages keep `audio.priority`, so older configs work unchanged.
+- Added `sources.lexin.entries` (default 2, range 1–10): the first N Lexin results are checked and every exact headword match is kept. Pre-multiple-entry single-result caches are no longer reused at the default; affected words such as reise are fetched again once. Revision-2 caches remain valid.
+- Added a VS Code recommendation for the Even Better TOML extension (colored, validated `config.toml`).
+- Added `[meaning] html = true` to read the Meaning column as sanitized HTML (tables, http(s) links, line breaks, inline colors/fonts). Scripts, event handlers, iframes, unsafe links and resource-loading styles are removed. Default `false` keeps the existing Excel-formatting behavior.
+- Compatibility: backward-compatible minor release. Anki fields, model IDs and note GUIDs are unchanged; older configs remain valid. New output filenames start with the input name, so scripts matching `words_*` need updating.
+- Validation: 116 automated tests, `main.py --check` on the local workbook and `git diff --check`. Live runs: Lexin reise returned both exact entries with Lexin audio; English book used Fastdic audio; an HTML-meaning table and link rendered in the HTML preview and APKG built. Physical AnkiDroid rendering of HTML meanings was not verified.
+
 ## v5.3.0 — 2026-10-14
 
 - Added a local SQLite dictionary cache with exact generated card HTML, original received entry HTML and byte-for-byte media backups. Successful results are reused by normalized word, source and effective options; fixed dictionaries do not depend on the selected input language. Missing media is restored from the database. Existing audio remains reusable and local caches are excluded from Git.

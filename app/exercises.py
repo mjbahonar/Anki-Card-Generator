@@ -190,8 +190,14 @@ def meaning_html(row, config=None):
     """Optional personal meaning, independent of dictionary caching and note IDs."""
     if (config is not None and not config.data.get('meaning', {}).get('enabled', True)) or not row.get('Meaning', '').strip():
         return ''
-    from app.excel_formatting import formatted_question
-    text = formatted_question({'Words': row['Meaning'], 'QuestionRuns': row.get('MeaningRuns')})
+    if config is not None and config.data.get('meaning', {}).get('html', False):
+        # Cell text is HTML; Excel formatting is ignored and unsafe markup is removed.
+        from app.sources import clean_html
+        text = clean_html(row['Meaning'], extra_tags=('u', 's', 'h1', 'h5', 'h6', 'code', 'pre', 'blockquote'),
+                          extra_attributes=('style', 'title'))
+    else:
+        from app.excel_formatting import formatted_question
+        text = formatted_question({'Words': row['Meaning'], 'QuestionRuns': row.get('MeaningRuns')})
     return ('<div class="gt-container custom-meaning-container"><div class="gt-title">meaning</div>'
             '<hr class="gt-separator"><div class="source-content" dir="auto">' + text + '</div></div>')
 

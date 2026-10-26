@@ -56,7 +56,7 @@ def load_config(path):
             if key not in data[section]:
                 raise ConfigError(f'Missing {section}.{key}')
         optional = ({'source_timeout_seconds'} if section == 'runtime' else
-                    {'order'} if section == 'input' else set())
+                    {'order'} if section == 'input' else {'word'} if section == 'audio' else set())
         if section != 'sources' and set(data[section]) - set(keys) - optional:
             raise ConfigError(f'Unknown setting in [{section}]: {set(data[section]) - set(keys) - optional}')
     cache = data.setdefault('dictionary_cache', {'enabled': True, 'path': 'Cache/dictionaries.sqlite3', 'refresh': False})
@@ -66,8 +66,9 @@ def load_config(path):
             or not cache.get('path', 'Cache/dictionaries.sqlite3').strip()):
         raise ConfigError('dictionary_cache requires enabled/refresh booleans and a non-empty path')
     meaning = data.setdefault('meaning', {'enabled': True})
-    if not isinstance(meaning, dict) or set(meaning) - {'enabled'} or type(meaning.get('enabled', True)) is not bool:
-        raise ConfigError('meaning.enabled must be true or false')
+    if (not isinstance(meaning, dict) or set(meaning) - {'enabled', 'html'}
+            or type(meaning.get('enabled', True)) is not bool or type(meaning.get('html', False)) is not bool):
+        raise ConfigError('meaning.enabled and meaning.html must be true or false')
     unknown = set(data) - set(required) - {'practice', 'cards', 'media', 'dictionary_cache', 'meaning'}
     if unknown:
         raise ConfigError(f'Unknown configuration section: {unknown}')
@@ -129,7 +130,15 @@ def load_config(path):
     priority = data['audio']['priority']
     if not isinstance(priority, list) or any(item not in ['lexin', 'fastdic', 'google_tts'] for item in priority):
         raise ConfigError('audio.priority supports lexin, fastdic and google_tts')
-    if data['audio']['enabled'] and not priority:
+    word = data['audio'].get('word', {})
+    if not isinstance(word, dict):
+        raise ConfigError('[audio.word] must map language codes to provider lists')
+    for code, providers in word.items():
+        if not re.fullmatch(r'[a-z]{2,3}(?:-[A-Za-z]{2,4})?', code):
+            raise ConfigError(f'audio.word.{code} must be a lowercase language code such as no or en')
+        if not isinstance(providers, list) or any(item not in ['lexin', 'fastdic', 'google_tts'] for item in providers):
+            raise ConfigError(f'audio.word.{code} supports lexin, fastdic and google_tts; [] disables')
+    if data['audio']['enabled'] and not priority and not word:
         raise ConfigError('audio.priority must not be empty when audio is enabled')
     if not data['info']['url'].startswith(('https://', 'http://')):
         raise ConfigError('info.url must be an http(s) URL')
@@ -138,7 +147,7 @@ def load_config(path):
             raise ConfigError(f'Unknown source: {name}. Available: {", ".join(SOURCE_SPECS)}')
         if not isinstance(settings, dict) or type(settings.get('enabled')) is not bool:
             raise ConfigError(f'sources.{name}.enabled must be true or false')
-        allowed = ({'enabled', 'variant', 'table_audio'} if name == 'lexin' else
+        allowed = ({'enabled', 'variant', 'table_audio', 'entries'} if name == 'lexin' else
                    {'enabled', 'count', 'priority'} if name == 'images' else
                    {'enabled', 'examples_per_definition'} if name in ['fastdic', 'cambridge', 'oxford'] else {'enabled'})
         if set(settings) - allowed:
@@ -147,6 +156,8 @@ def load_config(path):
             raise ConfigError('sources.lexin.variant must be bokmal, nynorsk or both')
         if name == 'lexin' and type(settings.get('table_audio', False)) is not bool:
             raise ConfigError('sources.lexin.table_audio must be true or false')
+        if name == 'lexin' and (type(settings.get('entries', 2)) is not int or not 1 <= settings.get('entries', 2) <= 10):
+            raise ConfigError('sources.lexin.entries must be between 1 and 10')
         if name == 'images' and (type(settings.get('count', 3)) is not int or not 1 <= settings.get('count', 3) <= 10):
             raise ConfigError('sources.images.count must be between 1 and 10')
         if name == 'images':

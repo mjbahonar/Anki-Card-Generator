@@ -241,7 +241,7 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(other.cache_result('oxford', 'book', loader), 'refetched')
         loader.assert_called_once()
 
-    def test_lexin_legacy_results_reuse_existing_cache_until_word_is_explicitly_cleared(self):
+    def test_lexin_legacy_single_entry_cache_serves_only_one_entry_setting(self):
         import json
         ctx = self.context()
         key = cache_key('lexin', 'gift', ctx.config)
@@ -251,14 +251,23 @@ class CacheTests(unittest.TestCase):
         ctx.dictionary_cache.put(old_key, 'lexin', 'gift', 'poison only', '', [], [])
         ctx.cache_result('oxford', 'gift', lambda: 'Oxford entry')
         loader = Mock(return_value='poison and married')
-        self.assertEqual(ctx.cache_result('lexin', 'gift', loader), 'poison only')
-        loader.assert_not_called()
-        self.assertTrue(ctx.last_cache_hit)
-        self.assertEqual(ctx.dictionary_cache.delete_word('gift', 'lexin'), 1)
         self.assertEqual(ctx.cache_result('lexin', 'gift', loader), 'poison and married')
         loader.assert_called_once()
         self.assertEqual(ctx.cache_result('lexin', 'gift', lambda: 'unexpected'), 'poison and married')
         self.assertEqual(ctx.cache_result('oxford', 'gift', lambda: 'unexpected'), 'Oxford entry')
+        single = copy.deepcopy(self.data)
+        single['sources']['lexin']['entries'] = 1
+        one = self.context(single)
+        self.assertEqual(one.cache_result('lexin', 'gift', lambda: 'unexpected'), 'poison only')
+        self.assertTrue(one.last_cache_hit)
+
+    def test_lexin_entry_count_changes_cache_key_except_default_two(self):
+        ctx = self.context()
+        default = cache_key('lexin', 'gift', ctx.config)
+        ctx.config.data['sources']['lexin']['entries'] = 2
+        self.assertEqual(cache_key('lexin', 'gift', ctx.config), default)
+        ctx.config.data['sources']['lexin']['entries'] = 3
+        self.assertNotEqual(cache_key('lexin', 'gift', ctx.config), default)
 
     def test_all_exact_lexin_entries_are_saved_and_reused_without_browser(self):
         import json
