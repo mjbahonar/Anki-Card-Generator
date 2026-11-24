@@ -1,5 +1,9 @@
 # Release notes
 
+## Unreleased
+
+- Added `python main.py --clear-source-cache SOURCE`: removes every cached result of one dictionary (for example `images`), its unused database backups and `Cache/media` archive files, then compacts the database. Other dictionaries' cache, the `Audio`/`Images` folders and cards are unchanged.
+
 ## v5.5.0 — 2026-11-24
 
 - Packaging: added `pyproject.toml`, so other projects can install this repository (`pip install -e ../Meaning-Ankidroid`) and reuse its dictionaries, audio, images and cache instead of copying code. `python main.py` is unchanged.

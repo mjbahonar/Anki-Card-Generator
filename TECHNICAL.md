@@ -202,6 +202,16 @@ python main.py --clear-cache hus
 
 The first command affects Lexin only; the second affects all sources for that word. The configured database path is respected, even when caching is disabled. Related media references and unused binary backups are removed from the database; local audio/image files remain. A subsequent normal run fetches the deleted dictionary result again.
 
+### Clear one dictionary from the cache
+
+Remove every cached result of one dictionary, for example images after turning `sources.images` off:
+
+```powershell
+python main.py --clear-source-cache images
+```
+
+Other dictionaries keep their cached text and audio, so later runs stay fast. Database backups used only by that dictionary and its unused archive files in `Cache/media` are removed, and the database file is compacted (`VACUUM`) so it actually shrinks. The `Audio`/`Images` folders and existing cards are not touched. If the dictionary is enabled again, its results are fetched again.
+
 ### Manual SQL maintenance
 
 For manual deletion in DB Browser's **Execute SQL**, explicitly remove child references too (some connections disable foreign keys), then save using **Write Changes**:

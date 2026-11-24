@@ -317,6 +317,43 @@ class CacheTests(unittest.TestCase):
         with closing(sqlite3.connect(cache.path)) as db:
             self.assertEqual(db.execute('SELECT word FROM results').fetchone()[0], 'giftig')
 
+    def test_delete_source_removes_only_that_source_and_unused_archive_files(self):
+        ctx = self.context()
+        ctx.audio_dir.mkdir()
+        sound = ctx.audio_dir / 'hus.mp3'
+        sound.write_bytes(MP3)
+        cache = ctx.dictionary_cache
+        media = cache.path.parent / 'media'
+        media.mkdir(parents=True)
+        own, shared = media / 'own.png', media / 'shared.png'
+        own.write_bytes(b'own image')
+        shared.write_bytes(b'shared image')
+        cache.put('img', 'images', 'hus', '<img>', '', [], [(own, 'archive'), (shared, 'archive')])
+        cache.put('lex', 'lexin', 'hus', 'house', '', [], [(sound, 'audio'), (shared, 'archive')])
+        self.assertEqual(cache.delete_source('images'), (1, 1))
+        self.assertFalse(own.exists())
+        self.assertTrue(shared.is_file())
+        self.assertTrue(sound.is_file())
+        with closing(sqlite3.connect(cache.path)) as db:
+            self.assertEqual(db.execute('SELECT source FROM results').fetchall(), [('lexin',)])
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM assets').fetchone()[0], 2)
+            self.assertEqual(db.execute('PRAGMA freelist_count').fetchone()[0], 0)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+        self.assertEqual(cache.delete_source('images'), (0, 0))
+
+    def test_clear_source_cache_cli_reports_counts(self):
+        import io
+        from contextlib import redirect_stdout
+        from main import main
+        ctx = self.context()
+        ctx.cache_result('lexin', 'gift', lambda: 'both entries')
+        path = self.root / 'maintenance.toml'
+        path.write_text('[dictionary_cache]\npath = "' + ctx.dictionary_cache.path.as_posix() + '"\n', encoding='utf-8')
+        output = io.StringIO()
+        with patch('main.run', side_effect=AssertionError('Must not run')), redirect_stdout(output):
+            self.assertEqual(main(['--config', str(path), '--clear-source-cache', 'lexin']), 0)
+        self.assertIn('Removed 1 cached results and 0 archive files for lexin', output.getvalue())
+
     def test_clear_cache_cli_needs_neither_excel_nor_network_and_missing_db_is_noop(self):
         import io
         from contextlib import redirect_stdout

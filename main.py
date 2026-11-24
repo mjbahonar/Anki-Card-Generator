@@ -253,13 +253,15 @@ def main(argv=None):
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--check', action='store_true', help='Validate config and Excel without fetching sources')
     modes.add_argument('--clear-cache', metavar='WORD', help='Delete cached dictionary results for one word')
+    modes.add_argument('--clear-source-cache', metavar='SOURCE', choices=list(SOURCE_SPECS),
+                       help='Delete every cached result of one dictionary and shrink the cache file')
     parser.add_argument('--source', choices=list(SOURCE_SPECS), help='Restrict --clear-cache to one dictionary')
     args = parser.parse_args(argv)
     if args.source and args.clear_cache is None:
         parser.error('--source requires --clear-cache')
     try:
-        if args.clear_cache is not None:
-            if not args.clear_cache.strip():
+        if args.clear_cache is not None or args.clear_source_cache:
+            if args.clear_cache is not None and not args.clear_cache.strip():
                 raise ConfigError('--clear-cache word must not be blank')
             # Cache maintenance does not require a readable Excel workbook or browser.
             import tomllib
@@ -270,8 +272,13 @@ def main(argv=None):
                 data = tomllib.load(stream)
             cache = data.get('dictionary_cache', {})
             config = Config(path, data)
-            count = DictionaryCache(config.resolve(cache.get('path', 'Cache/dictionaries.sqlite3'))).delete_word(
-                args.clear_cache, args.source)
+            store = DictionaryCache(config.resolve(cache.get('path', 'Cache/dictionaries.sqlite3')))
+            if args.clear_source_cache:
+                count, files = store.delete_source(args.clear_source_cache)
+                print(f'Removed {count} cached results and {files} archive files for {args.clear_source_cache}. '
+                      'Local audio/image folders retained.')
+                return 0
+            count = store.delete_word(args.clear_cache, args.source)
             print(f'Removed {count} cached results for {args.clear_cache!r} ({args.source or "all sources"}). Local media files retained.')
             return 0
         config = load_config(args.config)

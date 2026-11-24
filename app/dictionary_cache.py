@@ -78,6 +78,36 @@ class DictionaryCache:
         finally:
             db.close()
 
+    def delete_source(self, source):
+        """Remove every cached result of one source, its unused backups and archive files, then shrink the file.
+
+        Returns (removed results, removed archive files). Local audio/image folders are not touched.
+        """
+        if not self.path.is_file():
+            return 0, 0
+        db = self.connect()
+        try:
+            archived = {name for (name,) in db.execute(
+                "SELECT DISTINCT m.filename FROM result_media m JOIN results r USING(key) "
+                "WHERE r.source=? AND m.kind='archive'", (source,))}
+            with db:
+                count = db.execute('DELETE FROM results WHERE source=?', (source,)).rowcount
+                db.execute('DELETE FROM assets WHERE NOT EXISTS '
+                           '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+                still_used = {name for (name,) in db.execute(
+                    "SELECT DISTINCT filename FROM result_media WHERE kind='archive'")}
+            db.execute('VACUUM')  # SQLite keeps freed pages until the file is rebuilt.
+        finally:
+            db.close()
+        removed = 0
+        folder = self.path.parent / 'media'
+        for name in archived - still_used:
+            path = folder / name
+            if Path(name).name == name and path.is_file():
+                path.unlink()
+                removed += 1
+        return count, removed
+
     def get(self, key, ctx):
         if not self.path.is_file():
             return None
