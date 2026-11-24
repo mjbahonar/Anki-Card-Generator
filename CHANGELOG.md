@@ -1,5 +1,18 @@
 # Release notes
 
+## v5.5.0 — 2026-11-24
+
+- Packaging: added `pyproject.toml`, so other projects can install this repository (`pip install -e ../Meaning-Ankidroid`) and reuse its dictionaries, audio, images and cache instead of copying code. `python main.py` is unchanged.
+- Added `app.api` (`API_VERSION = 1`): `load_settings`, `enabled_sources`, `read_input_words`, `Lookup` with `WordResult`/`SourceResult`, and `Lookup.images(term)` with `ImageResult` to search images for any term (such as an English meaning), `sanitize_html` (the Meaning-column HTML rules) and `excel_formatted_cells` (Excel cell formatting as HTML). Other modules remain internal.
+- Added contract tests (`tests/test_contract.py`) that fail when a change would break projects using `app.api`: API names, signatures and result fields, Lexin card HTML structure (checked against a saved real entry), image result HTML and the config keys they use.
+- `load_config(path, check_files=False)` skips the Excel/style file checks for library use; the default behavior is unchanged.
+- The version now lives in `app.__version__`; `main.VERSION` still works.
+- Added `"bing"` to `sources.images.priority`: full-size Bing Images results for "<word> clipart" with strict SafeSearch, credited to the source site. No license data; for personal study material only. Existing priorities are unchanged.
+- Fixed words running together in Bokmålsordboka/Nynorskordboka alternative forms ("husahusene" → "husa, husene") and Dict.com headwords ("husn" → "hus n"). The sites draw these separators with CSS that cards do not include; they are now written into the text, also for cached results.
+- Fixed Wikimedia Commons images failing with HTTP 403 ("Too many requests… robot policy"): Commons API and image requests now send a descriptive User-Agent instead of a generic browser one.
+- Compatibility: backward-compatible minor release. No configuration, CLI or Anki schema changes; model IDs and note GUIDs are unchanged and older configs remain valid. Bokmålsordboka/Dict.com card text now includes the restored separators, so re-imported notes show "husa, husene" instead of "husahusene". `"bing"` is opt-in; default image priorities are unchanged.
+- Validation: 137 automated tests (including the new API and contract tests) on a clean copy of this commit, `git diff --check`, and live runs: Bing images for bil/hus downloaded, shown in the HTML preview and bundled in an APKG, then reused from the cache on a second run without network image search; Lexin + Bokmålsordboka + Dict.com cards through the flash-cards project. `python main.py --check` with the default config and a local `Input.xlsx` (33 words, Lexin). Known limitations: Google Images answers automated searches with a CAPTCHA on many networks; Bing results are automatic and may need review.
+
 ## v5.4.0 — 2026-10-26
 
 - Output files now start with the input workbook name: `<input>_<filename_prefix>_<date-time>`.

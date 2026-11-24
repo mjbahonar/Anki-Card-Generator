@@ -1,0 +1,33 @@
+# Packaging lets other projects (for example flash-cards) use the dictionary,
+# cache and audio code through app.api. Users still run `python main.py`.
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meaning-ankidroid"
+description = "Dictionary lookup, cache and Anki deck generation for vocabulary study"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dynamic = ["version"]
+# Keep in sync with requirements.txt.
+dependencies = [
+    "pandas",
+    "openpyxl>=3.1.5",
+    "xlrd",
+    "requests",
+    "beautifulsoup4",
+    "Pillow",
+    "python-dotenv",
+    "genanki",
+    "gTTS",
+    "playwright",
+    "wakepy",
+]
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.setuptools.dynamic]
+version = { attr = "app.__version__" }

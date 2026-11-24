@@ -14,8 +14,7 @@ from app.sources import SOURCE_SPECS, SourceContext, dictionary_content, select_
 from app.console_report import ConsoleReport, concise
 from app.exercises import read_records, options, language_settings, exercise_audio, render_exercise, direction, complete_gap
 from app.anki_exporter import write_import_csv
-
-VERSION = '5.4.0'
+from app import __version__ as VERSION
 
 
 def read_words(config):

@@ -18,9 +18,13 @@
 /Output
 /outputs
 /venv
+/Input Excels
 
 __pycache__/
 *.py[cod]
 
 # Local dictionary database and archived media
 /Cache/
+
+# Editable install metadata (pip install -e)
+*.egg-info/

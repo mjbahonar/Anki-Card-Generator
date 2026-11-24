@@ -104,6 +104,8 @@ examples_per_definition = 3
 [sources.images]
 enabled = false               # Vocabulary images, with provider fallback
 count = 2
+# Tried in order: "google" (often blocked by a CAPTCHA), "commons" = Wikimedia Commons (freely licensed),
+# "bing" = Bing Images for "<word> clipart" (no license data: personal study only). Example: ["bing", "commons"]
 priority = ["google", "commons"] # Use ["commons"] to skip Google
 
 [sources.oxford]

@@ -24,7 +24,8 @@ class Config:
         return path.resolve() if path.is_absolute() else (self.path.parent / path).resolve()
 
 
-def load_config(path):
+def load_config(path, check_files=True):
+    """Validate config.toml. check_files=False skips the Excel/style file checks for library use."""
     from app.sources import SOURCE_SPECS
 
     path = Path(path).resolve()
@@ -162,12 +163,14 @@ def load_config(path):
             raise ConfigError('sources.images.count must be between 1 and 10')
         if name == 'images':
             priority = settings.get('priority', ['google', 'commons'])
-            if not isinstance(priority, list) or not priority or any(p not in ['google', 'commons'] for p in priority):
-                raise ConfigError('sources.images.priority must contain google and/or commons')
+            if not isinstance(priority, list) or not priority or any(p not in ['google', 'commons', 'bing'] for p in priority):
+                raise ConfigError('sources.images.priority must contain google, commons and/or bing')
         if name in ['fastdic', 'cambridge', 'oxford'] and (type(settings.get('examples_per_definition', 3)) is not int
                                                  or settings.get('examples_per_definition', 3) < 0):
             raise ConfigError(f'sources.{name}.examples_per_definition must be an integer >= 0')
     config = Config(path, data)
+    if not check_files:
+        return config
     if not config.resolve(data['input']['file']).is_file():
         raise ConfigError(f'Input file not found: {config.resolve(data["input"]["file"])}')
     if not config.resolve(data['style']['file']).is_file():

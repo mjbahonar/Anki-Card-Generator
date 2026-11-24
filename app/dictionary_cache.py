@@ -26,6 +26,8 @@ def cache_key(name, word, config, audio=False):
     elif name == 'images':
         settings.setdefault('count', 3)
         settings.setdefault('priority', ['google', 'commons'])
+        if 'bing' in settings['priority']:
+            settings['bing_query'] = 'clipart'  # Bing searches "<word> clipart"; earlier plain-word results are not reused.
     # The adapter revision protects against reusing output from a changed parser.
     return json.dumps([1, name, normalize_headword(word), settings], sort_keys=True, ensure_ascii=False)
 

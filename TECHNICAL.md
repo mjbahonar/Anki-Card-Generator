@@ -93,7 +93,7 @@ After the first import, keep the deck/model IDs fixed. Disabling or reordering s
 
 ## Troubleshooting
 
-Images use `sources.images.priority = ["google", "commons"]`: try Google first, then Wikimedia Commons when Google is unavailable or fewer images were downloaded. Set `enabled = true` and `count = 3` to enable images; `["commons"]` skips Google. Images are stored locally and bundled into Anki, with Commons attribution/license text. Results are automatic and may need review for ambiguous words.
+Images use `sources.images.priority = ["google", "commons"]`: try Google first, then Wikimedia Commons when Google is unavailable or fewer images were downloaded. Set `enabled = true` and `count = 3` to enable images; `["commons"]` skips Google. `"bing"` adds Bing Images (full-size pictures from the websites Bing finds for "<word> clipart", with strict SafeSearch; the card credits the site). Bing images carry no license information and automated searching is outside Bing's terms, so use them only for personal study material and expect Bing to block it some day. Google currently answers automated searches with a CAPTCHA on many networks. Images are stored locally and bundled into Anki, with Commons attribution/license text. Results are automatic and may need review for ambiguous words.
 
 Dict.com currently uses the English–Norwegian pair: English input returns Norwegian meanings, not Persian. Disable it for an English–Persian deck; use Fastdic for Persian meanings and Cambridge for English definitions.
 
@@ -230,7 +230,35 @@ python -m unittest discover -s tests -v
 
 `main.py` is the application entry point. Use `config.toml` for everyday settings.
 
-All supporting Python modules live in the `app/` package; automated tests live in `tests/`. The repository root contains only `main.py` as a Python file. Run tests from the repository root with `python -m unittest discover -s tests -v`. Configuration, workbooks, styles, media and the existing dictionary database keep their paths.
+All supporting Python modules live in the `app/` package; automated tests live in `tests/`. The repository root contains only `main.py` as a Python file. The version is `app.__version__`, which `main.VERSION` and `pyproject.toml` read.
+
+### Using this repository as a library
+
+Other projects, such as a separate flash-cards renderer, can reuse the dictionaries, audio, images and cache without copying code. Place the project next to this folder and install this repository into that project's environment in editable mode, so changes here are used immediately:
+
+```powershell
+python -m pip install -e ../Meaning-Ankidroid
+```
+
+For a server or GitHub Actions, pin a release instead: `pip install "meaning-ankidroid @ git+https://github.com/<owner>/Meaning-Ankidroid@v5.5.0"`.
+
+Import only `app.api`; other modules are internal and may change. `API_VERSION` increases when the API changes incompatibly.
+
+| Name | Purpose |
+| --- | --- |
+| `load_settings(path, check_files=False)` | Validate this repository's `config.toml`; the Excel input and style files are only checked with `check_files=True` |
+| `enabled_sources(config)` | Enabled sources compatible with `language.source`, in config order |
+| `read_input_words(config)` | Vocabulary words from the configured workbook |
+| `Lookup(config)` | Context manager; `lookup.word(word, sources=None, audio=True)` returns a `WordResult` |
+| `lookup.images(term)` | Image search for any term (for example a word's English meaning) with the `[sources.images]` options, which must be enabled; returns an `ImageResult` (`term`, `status`, `paths`, `credits`, `message`, `cached`, `issues`), cached by term |
+| `sanitize_html(markup)` | Safe HTML for user-written content such as a Meaning cell (the `[meaning] html = true` rules) |
+| `excel_formatted_cells(path, sheet, column, cells)` | Excel formatting as HTML for the given `{row: text}` cells of a 0-based column (bold, italic, underline, strike-through, colors, fill, size, font; `.xlsx`/`.xls`); returns only formatted cells |
+| `WordResult` | `word`, `language`, `translation_target`, `sources`, `audio` (MP3 path or `None`), `images` (paths), `issues`; `found()` and `source(name)` helpers |
+| `SourceResult` | `name`, `title`, `rtl`, `status` (`ok`/`empty`/`fail`), sanitized `html`, `message`, `cached` |
+
+**Contract tests.** `tests/test_contract.py` checks what other projects rely on beyond the names above: the `app.api` signatures and result fields, the Lexin card HTML structure (`ul.search-table` per entry, `dt`/`dd` rows labelled `oppslagsord`/`ordklasse`/`forklaring`, `.grunnform`, `.pronunciation`, `table.inflection-table` with `audio[src]` form pronunciations; checked against the saved original entry in `tests/fixtures/lexin_hus_entry.html`), the image result HTML (`.image-result img[src]`, `.image-credit`) and the config keys flash-cards uses. A failure there means the change would break flash-cards: update it as well (its `tests/test_meaning_contract.py` runs the same checks from its side), and for incompatible `app.api` changes raise `API_VERSION` and release a MAJOR version.
+
+All dictionary, audio, image, cache and network behavior comes from `config.toml`, and relative paths stay relative to it, so the consumer shares `Cache/dictionaries.sqlite3`, `Audio` and `Output/media`. The consumer's own configuration should contain only its presentation settings plus the path to this `config.toml`. Use one `Lookup` per thread. Run tests from the repository root with `python -m unittest discover -s tests -v`. Configuration, workbooks, styles, media and the existing dictionary database keep their paths.
 
 Exercise prompts (`type`, `sentence`, `gap`) retain direct Excel text formatting on the front: whole-cell and partial-text bold, italic, underline, strike-through and font colors; XLSX also retains solid cell fills and custom font sizes/families. Rich-text XLSX requires `openpyxl>=3.1.5` from requirements.txt. Gap markers work even across formatted runs. Plain question/answer values remain separate for speech, native typing and stable note identity. Listening prompts stay hidden on the front. Normal vocabulary cards retain their shared appearance. Conditional formatting, borders and spreadsheet geometry are not copied. The input workbook is read without being modified.
 
@@ -240,9 +268,10 @@ Exercise prompts (`type`, `sentence`, `gap`) retain direct Excel text formatting
 | `Template.xlsx` | Blank five-column input template; copy to Input.xlsx |
 | `main.py` | The only file you run |
 | `app/app_config.py` | Configuration validation |
+| `app/api.py`, `pyproject.toml` | Supported library interface and packaging for other projects |
 | `app/sources.py` | Dictionary and audio adapters |
 | `app/lexin_scraper.py`, `app/oxford_scraper.py`, `app/ordbokene_scraper.py` | Dictionary-specific extraction |
-| `app/image_sources.py` | Google/Commons image downloading |
+| `app/image_sources.py` | Google/Commons/Bing image downloading |
 | `app/anki_exporter.py` | Stable Anki model and package generation |
 | `app/console_report.py` | Console progress and final run summary |
 | `Styles/cards.css` | The shared card style |

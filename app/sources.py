@@ -265,8 +265,8 @@ class SourceContext:
             message = f'HTTP {status}' + (' (rate limited; try again later)' if status == 429 else ' (source unavailable)')
         self.errors.append({'word': word, 'source': source, 'message': str(message)})
 
-    def fetch(self, url):
-        response = self.session.get(url, timeout=self.timeout)
+    def fetch(self, url, headers=None):
+        response = self.session.get(url, timeout=self.timeout, headers=headers)
         response.raise_for_status()
         self.check_budget()
         # Oxford captures its entry itself; images archive only the chosen files,
@@ -422,8 +422,46 @@ def dictionary_content(name, word, number, ctx):
     if name == 'lexin':
         return _dictionary_content(name, word, number, ctx)
     if isinstance(ctx, SourceContext):
-        return ctx.cache_result(name, word, lambda: _dictionary_content(name, word, number, ctx))
-    return _dictionary_content(name, word, number, ctx)
+        content = ctx.cache_result(name, word, lambda: _dictionary_content(name, word, number, ctx))
+    else:
+        content = _dictionary_content(name, word, number, ctx)
+    return restore_separators(name, content)
+
+
+# The dictionary sites draw these separators with their own CSS, which cards do not include.
+COMMA_SOURCES = ('bokmalsordboka', 'nynorskordboka')
+SPACED_CLASSES = ('lex_ful_entr', 'lex_ful_morf')
+
+
+def restore_separators(name, content):
+    """Write the separators the sites only show through CSS: Ordbøkene's alternative forms
+    (husa, husene) and the space between Dict.com's headword and word class (hus n).
+    Idempotent, so fresh and cached results give the same text."""
+    if not content or (name not in COMMA_SOURCES and name != 'dict_com'):
+        return content
+    from bs4 import NavigableString
+    soup = BeautifulSoup(content, 'html.parser')
+    changed = False
+
+    def next_tag(element):
+        sibling = element.next_sibling
+        while isinstance(sibling, NavigableString) and not sibling.strip():  # Blank text and <!-- --> markers.
+            sibling = sibling.next_sibling
+        return sibling
+
+    if name in COMMA_SOURCES:
+        for span in soup.select('span.comma'):
+            following = next_tag(span)
+            if getattr(following, 'name', None) == 'span' and 'comma' in following.get('class', []):
+                span.insert_after(NavigableString(', '))
+                changed = True
+    else:
+        for span in soup.select(', '.join('.' + name for name in SPACED_CLASSES)):
+            following = span.next_sibling
+            if following is not None and not isinstance(following, NavigableString):
+                span.insert_after(NavigableString(' '))
+                changed = True
+    return str(soup) if changed else content
 
 
 def _dictionary_content(name, word, number, ctx):
