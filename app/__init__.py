@@ -3,4 +3,4 @@
 Other projects should import only ``app.api``; everything else is internal.
 """
 
-__version__ = '5.9.0'
+__version__ = '5.9.1'

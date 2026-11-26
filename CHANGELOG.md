@@ -1,5 +1,11 @@
 # Release notes
 
+## v5.9.1 — 2026-11-26
+
+- Fixed every Lexin word being fetched and saved again after `sources.lexin.form_entries` was added to `config.toml` (5.8.0–5.9.0 put it in the cache key, contrary to the 5.8.0 notes). It no longer affects the key of found results; it only decides when a saved "not found" is checked again. Results saved by 5.8.0–5.9.0 are reused, so nothing is fetched twice.
+- Compatibility: patch release. No configuration, CLI, database structure, Anki or `app.api` changes. Lexin results saved with different `entries` or `variant` settings remain separate, as before.
+- Validation: full automated test suite on a clean copy of this commit (with a new test that `form_entries` never changes the key and that 5.8.0–5.9.0 rows are reused), `python main.py --check`, `git diff --check` and the flash-cards tests. On a copy of a real cache: bil, billett, dem and bestille (saved before 5.8.0 and again under 5.8.0 keys) and gikk, husene, brødre (indirect) all came from the cache with no network lookup.
+
 ## v5.9.0 — 2026-11-26
 
 - Added a run report: `"report"` in `output.formats` writes `<output>_report.pdf` (summary, every word with each dictionary's result, issues and every setting) and `<output>_report.png` (the summary page).

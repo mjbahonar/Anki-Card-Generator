@@ -71,6 +71,37 @@ class InflectedFormTests(unittest.TestCase):
                                               max_entries=1, form_entries=1)
         self.assertEqual(content, '')
 
+    def test_form_entries_never_changes_the_cache_key_and_older_keys_are_reused(self):
+        import json
+        import tempfile
+        from app.dictionary_cache import cache_key
+        from app.sources import SourceContext
+        data = tomllib.loads((ROOT / 'config.toml').read_text(encoding='utf-8'))
+        keys = set()
+        for value in (None, 0, 3, 7):
+            data['sources']['lexin'].pop('form_entries', None)
+            if value is not None:
+                data['sources']['lexin']['form_entries'] = value
+            keys.add(cache_key('lexin', 'bil', Config(ROOT / 'config.toml', data), True))
+        self.assertEqual(len(keys), 1)
+        (ROOT / 'Output').mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=ROOT / 'Output') as folder:
+            data['sources']['lexin']['form_entries'] = 3
+            data['media'] = {'anki_directory': ''}
+            data['dictionary_cache'] = {'enabled': True, 'path': str(Path(folder) / 'c.sqlite3')}
+            data['audio']['directory'] = str(Path(folder) / 'Audio')
+            ctx = SourceContext(Config(ROOT / 'config.toml', data))
+            try:
+                key = json.loads(cache_key('lexin', 'gikk', ctx.config, False))
+                key[3]['form_entries'] = 3  # How 5.8.0-5.9.0 saved it.
+                ctx.dictionary_cache.put(json.dumps(key, sort_keys=True, ensure_ascii=False), 'lexin', 'gikk',
+                                         '<div class="lexin-form-note">gikk → <b>gå</b></div>', '', [], [])
+                loader = Mock(return_value='<p>refetched</p>')
+                self.assertIn('lexin-form-note', ctx.cache_result('lexin', 'gikk', loader))
+                loader.assert_not_called()
+            finally:
+                ctx.close()
+
     def test_saved_not_found_is_rechecked_when_form_checking_changes(self):
         data = tomllib.loads((ROOT / 'config.toml').read_text(encoding='utf-8'))
         config = Config(ROOT / 'config.toml', data)

@@ -15,6 +15,9 @@ def cache_key(name, word, config, audio=False):
         settings['adapter_revision'] = 2  # Multiple exact entries; legacy keys serve entries = 1 only.
         if settings.get('entries', 2) == 2:
             settings.pop('entries', None)  # Revision 2 always inspected two results.
+        # form_entries only decides "not found" results, which record it themselves; found results
+        # do not depend on it, so it must not change their key (5.8.0-5.9.0 included it by mistake).
+        settings.pop('form_entries', None)
         settings.setdefault('variant', 'nynorsk' if config.data['language']['source'] == 'nn' else 'bokmal')
         settings['headword_audio'] = bool(audio)
         settings['table_audio'] = bool(settings.get('table_audio', False) and config.data['audio']['enabled']

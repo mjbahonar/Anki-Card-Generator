@@ -199,6 +199,16 @@ class SourceContext:
                 legacy[3].pop('entries', None)
                 legacy_key = json.dumps(legacy, sort_keys=True, ensure_ascii=False)
                 cached = self.dictionary_cache.get(legacy_key, self)
+            form_entries = self.config.section('sources').get('lexin', {}).get('form_entries')
+            outdated_absence = (cached is not None and not cached[0] and name == 'lexin'
+                                and not lexin_absence_current(cached[2], self.config))
+            if ((cached is None or outdated_absence) and name == 'lexin' and form_entries is not None
+                    and not self.config.data.get('dictionary_cache', {}).get('refresh', False)):
+                # Results saved by 5.8.0-5.9.0 had form_entries in their key; reuse them instead of refetching.
+                import json
+                older = json.loads(key)
+                older[3]['form_entries'] = form_entries
+                cached = self.dictionary_cache.get(json.dumps(older, sort_keys=True, ensure_ascii=False), self) or cached
         except (OSError, ValueError, sqlite3.Error) as exc:
             self.issue(word, 'dictionary_cache', exc)
             cached = None
