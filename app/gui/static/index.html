@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Anki Card Generator — Settings</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='20' height='22' rx='4' fill='%236366f1'/%3E%3Crect x='9' y='3' width='20' height='22' rx='4' fill='%23a5b4fc'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"><span></span><span></span></div>
+        <div>
+          <div class="brand-title" data-t="app.title"></div>
+          <div class="brand-sub"><span data-t="app.subtitle"></span> <span id="version" class="version"></span></div>
+        </div>
+      </div>
+      <nav id="tabs" class="tabs" role="tablist"></nav>
+      <div class="sidebar-foot">
+        <label id="language-picker" class="language-picker" hidden>
+          <span data-t="language.label"></span>
+          <select id="language"></select>
+        </label>
+        <div class="config-path"><span data-t="app.config_file"></span><code id="config-path"></code></div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="page-head">
+        <div>
+          <h1 id="page-title"></h1>
+          <p id="page-desc"></p>
+        </div>
+        <div class="head-actions">
+          <button id="reload" class="btn ghost" data-t="action.reload"></button>
+        </div>
+      </header>
+      <div id="banner" class="banner" hidden></div>
+      <section id="page" class="page"></section>
+    </main>
+  </div>
+
+  <footer class="runbar">
+    <div class="runbar-status">
+      <span id="dirty-dot" class="dot"></span>
+      <span id="status"></span>
+    </div>
+    <div class="progress" id="progress" hidden><div id="progress-bar"></div></div>
+    <div class="runbar-actions">
+      <button id="revert" class="btn ghost" data-t="action.revert" disabled></button>
+      <button id="save" class="btn" data-t="action.save" disabled></button>
+      <span class="sep"></span>
+      <button id="toggle-log" class="btn ghost" data-t="action.show_log"></button>
+      <button id="open-output" class="btn ghost" data-t="action.open_output"></button>
+      <button id="check" class="btn" data-t="action.check"></button>
+      <button id="stop" class="btn danger" data-t="action.stop" hidden></button>
+      <button id="run" class="btn primary"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.8v10.4a.6.6 0 0 0 .9.5l8.3-5.2a.6.6 0 0 0 0-1L4.9 2.3a.6.6 0 0 0-.9.5z"/></svg><span data-t="action.run"></span></button>
+    </div>
+  </footer>
+
+  <div id="log-panel" class="log-panel" hidden>
+    <div class="log-head">
+      <strong data-t="action.show_log"></strong>
+      <span id="log-status" class="log-status"></span>
+      <button id="clear-log" class="btn ghost small" data-t="action.clear_log"></button>
+      <button id="close-log" class="btn ghost small" aria-label="Close">✕</button>
+    </div>
+    <pre id="log"></pre>
+  </div>
+
+  <dialog id="confirm">
+    <form method="dialog">
+      <p id="confirm-text"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="ok" class="btn primary">OK</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/static/app.js"></script>
+</body>
+</html>

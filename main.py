@@ -1,5 +1,6 @@
 """Unified application. Edit config.toml, then run python main.py."""
 import argparse
+import signal
 from contextlib import nullcontext
 from datetime import datetime
 import html
@@ -255,11 +256,23 @@ def main(argv=None):
     modes.add_argument('--clear-cache', metavar='WORD', help='Delete cached dictionary results for one word')
     modes.add_argument('--clear-source-cache', metavar='SOURCE', choices=list(SOURCE_SPECS),
                        help='Delete every cached result of one dictionary and shrink the cache file')
+    modes.add_argument('--gui', action='store_true', help='Open the settings window for config.toml')
+    parser.add_argument('--port', type=int, default=0, help='Port for --gui (default: any free port)')
+    parser.add_argument('--no-browser', action='store_true', help='With --gui, print the link instead of opening it')
     parser.add_argument('--source', choices=list(SOURCE_SPECS), help='Restrict --clear-cache to one dictionary')
     args = parser.parse_args(argv)
     if args.source and args.clear_cache is None:
         parser.error('--source requires --clear-cache')
+    if hasattr(signal, 'SIGBREAK'):
+        # The GUI's Stop button sends Ctrl+Break on Windows; treat it like Ctrl+C so finished words are saved.
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
     try:
+        if args.gui:
+            try:
+                from app.gui.server import serve
+            except ImportError as exc:
+                raise ImportError(f'{exc}; install the GUI dependency with: pip install tomlkit') from exc
+            return serve(args.config, Path(__file__), args.port, open_browser=not args.no_browser)
         if args.clear_cache is not None or args.clear_source_cache:
             if args.clear_cache is not None and not args.clear_cache.strip():
                 raise ConfigError('--clear-cache word must not be blank')

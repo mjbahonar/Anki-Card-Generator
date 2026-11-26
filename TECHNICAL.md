@@ -7,6 +7,7 @@ Advanced configuration, source behavior, exercise rules, cache maintenance and d
 ## Contents
 
 - [Configuration](#configuration)
+- [Settings GUI](#settings-gui)
 - [Troubleshooting](#troubleshooting)
 - [Exercise cards](#exercise-cards)
 - [Lexin table pronunciation](#lexin-table-pronunciation)
@@ -90,6 +91,19 @@ Only the input headword's pronunciation is downloaded. `[audio.word]` chooses pr
 ### Anki identity
 
 After the first import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
+
+## Settings GUI
+
+`python main.py --gui` starts a small local server on `127.0.0.1` and opens the settings page in your browser. Options: `--port N` for a fixed port and `--no-browser` to only print the link. Press Ctrl+C in the terminal to close it.
+
+- **One settings file.** The GUI reads and writes `config.toml` only. Edits replace values in place, so comments, spacing and key order are kept; dictionaries can be reordered, which changes their display order on cards. Before writing, the result is validated with the same rules as `main.py`. A missing workbook or style file is reported as a warning after saving.
+- **Outside edits are safe.** If `config.toml` was changed in an editor after the page loaded, saving is refused until you reload.
+- **Run, Check, Stop.** These start `main.py` as a separate process, exactly like the command line, so every run reads `config.toml` from disk. Unsaved changes are saved first. **Stop** works like Ctrl+C: finished words are saved as a `_partial` file. Pressing Stop a second time ends the process immediately.
+- **Cache maintenance** (Advanced page) runs `--clear-source-cache` for one dictionary.
+- **Security.** The server listens on localhost only. API requests need a random per-session token from the printed link, and requests from other hosts or web origins are refused.
+- **Languages.** The interface is English. Its text lives in `app/gui/i18n.py`; to add a language, copy the `en` table under a new code and translate it (`dir = 'rtl'` for Persian or Arabic). Missing keys fall back to English, and a language picker appears once there is more than one.
+
+The GUI needs `tomlkit` (included in `requirements.txt`). It does not change `app.api`, the card output or the Anki schema.
 
 ## Troubleshooting
 

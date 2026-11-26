@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a settings GUI: `python main.py --gui` opens a local browser page that edits `config.toml` in place (comments kept, validated with the same rules as `main.py`), reorders dictionaries, and has Check, Run and Stop buttons with a live log. Stop saves finished words like Ctrl+C. The interface is English; its text is in `app/gui/i18n.py` so other languages can be added later. New dependency: `tomlkit`. `app.api`, card output and the Anki schema are unchanged.
+- Ctrl+Break on Windows now stops a run the same way as Ctrl+C (finished words are saved).
 - Added `python main.py --clear-source-cache SOURCE`: removes every cached result of one dictionary (for example `images`), its unused database backups and `Cache/media` archive files, then compacts the database. Other dictionaries' cache, the `Audio`/`Images` folders and cards are unchanged.
 
 ## v5.5.0 — 2026-11-24

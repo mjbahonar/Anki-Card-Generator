@@ -45,6 +45,8 @@ Edit the existing sections in **`config.toml`**:
 
 The distributed configuration enables only **Lexin Bokmål–English**. For English, set the source language to `en` and enable compatible sources such as Cambridge, Oxford or Fastdic. Changing the language does not enable dictionaries automatically.
 
+Prefer forms over editing text? Run `python main.py --gui` to open a settings window in your browser. It edits the same `config.toml` (comments are kept), and its **Check** and **Run** buttons start the same commands as below. Keep the terminal open while you use it.
+
 Tip: in VS Code, install the recommended **Even Better TOML** extension for colored, validated `config.toml` editing.
 
 **4. Generate and import**

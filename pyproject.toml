@@ -24,10 +24,14 @@ dependencies = [
     "gTTS",
     "playwright",
     "wakepy",
+    "tomlkit",
 ]
 
 [tool.setuptools]
-packages = ["app"]
+packages = ["app", "app.gui"]
+
+[tool.setuptools.package-data]
+"app.gui" = ["static/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "app.__version__" }
