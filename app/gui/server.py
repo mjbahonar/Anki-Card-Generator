@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 import tomllib
+from urllib.parse import parse_qs
 import webbrowser
 
 from app.app_config import ConfigError
@@ -63,6 +64,7 @@ class GuiApp:
         self.token = secrets.token_urlsafe(24)
         self.job = None
         self.lock = threading.Lock()
+        self.dialog_lock = threading.Lock()
 
     # Tasks -----------------------------------------------------------------
     def start(self, kind, extra=()):
@@ -111,6 +113,42 @@ class GuiApp:
         path = Path(str(value)).expanduser()
         return path if path.is_absolute() else (self.config_path.parent / path)
 
+    def files(self, check=None):
+        state = {'input_files': self.input_files(), 'style_files': self.style_files()}
+        if check is not None:
+            state['exists'] = bool(check.strip()) and self.resolve(check.strip()).is_file()
+        return state
+
+    def style_files(self):
+        folder = self.config_path.parent
+        return sorted(p.relative_to(folder).as_posix() for p in folder.glob('Styles/*.css'))
+
+    def browse(self, kind, current=''):
+        """Native "Open file" dialog on this computer; returns a path relative to config.toml when possible."""
+        import tkinter as tk
+        from tkinter import filedialog
+        types = ([('Excel workbooks', '*.xlsx *.xlsm *.xls'), ('All files', '*.*')] if kind == 'input'
+                 else [('Style sheets', '*.css'), ('All files', '*.*')])
+        start = self.resolve(current).parent if current else self.config_path.parent
+        if not start.is_dir():
+            start = self.config_path.parent
+        with self.dialog_lock:
+            root = tk.Tk()
+            try:
+                root.withdraw()
+                root.attributes('-topmost', True)
+                chosen = filedialog.askopenfilename(parent=root, initialdir=str(start), filetypes=types,
+                                                    title='Choose a workbook' if kind == 'input' else 'Choose a style sheet')
+            finally:
+                root.destroy()
+        if not chosen:
+            return None
+        path = Path(chosen).resolve()
+        try:
+            return path.relative_to(self.config_path.parent).as_posix()
+        except ValueError:
+            return path.as_posix()
+
     def input_files(self):
         folder = self.config_path.parent
         found = []
@@ -125,8 +163,7 @@ class GuiApp:
         return {'strings': i18n.strings(language), 'languages': i18n.languages(),
                 'config_path': str(self.config_path), 'app_version': __version__,
                 'schema': config_doc.describe(self.config_path), 'input_files': self.input_files(),
-                'style_files': sorted(p.relative_to(self.config_path.parent).as_posix()
-                                      for p in self.config_path.parent.glob('Styles/*.css')),
+                'style_files': self.style_files(),
                 'cache_sources': list(SOURCE_SPECS), 'job': self.job_state()}
 
     def open_folder(self, what):
@@ -186,10 +223,12 @@ def make_handler(app, port_holder):
                 return self._send(HTTPStatus.OK, (STATIC / name).read_bytes(), STATIC_FILES[name])
             if not self._authorized():
                 return self._send(HTTPStatus.FORBIDDEN, {'error': 'Missing or wrong session token'})
-            params = dict(part.split('=', 1) for part in query.split('&') if '=' in part)
+            params = {key: values[0] for key, values in parse_qs(query).items()}
             try:
                 if route == '/api/state':
                     return self._send(HTTPStatus.OK, app.state(params.get('lang')))
+                if route == '/api/files':
+                    return self._send(HTTPStatus.OK, app.files(params.get('check')))
                 if route == '/api/job':
                     return self._send(HTTPStatus.OK, app.job_state(int(params.get('since', 0))))
             except (OSError, ValueError, ConfigError) as exc:
@@ -225,6 +264,11 @@ def make_handler(app, port_holder):
                     return self._send(HTTPStatus.OK, app.job_state())
                 if self.path == '/api/stop':
                     return self._send(HTTPStatus.OK, {'stopped': app.stop()})
+                if self.path == '/api/browse':
+                    kind = body.get('kind')
+                    if kind not in ('input', 'style'):
+                        raise ValueError('Unknown file kind')
+                    return self._send(HTTPStatus.OK, {'path': app.browse(kind, str(body.get('current') or ''))})
                 if self.path == '/api/open':
                     app.open_folder(body.get('what'))
                     return self._send(HTTPStatus.OK, {})

@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 
 import tomlkit
-from tomlkit.items import AoT, Array, Bool, Float, Integer, String, Table
+from tomlkit.items import AoT, Array, Bool, Float, Integer, KeyType, SingleKey, String, Table
 
 from app.app_config import ConfigError, load_config
 
@@ -56,6 +56,7 @@ CHOICES = {
 }
 FILE_FIELDS = {'input.file': ('.xlsx', '.xlsm', '.xls'), 'style.file': ('.css',)}
 LONG_TEXT = {'info.text'}
+DECKS = ['anki', 'saved_decks']  # Saved deck names and IDs; deck_name/deck_id hold the active one.
 
 
 def version(text):
@@ -126,6 +127,8 @@ def _groups(table, path):
     if fields:
         groups.append({'path': path, 'help': _comment(table), 'fields': fields})
     for key, item in nested:
+        if path + [key] == DECKS:
+            continue  # Shown by the deck picker instead of as plain fields.
         groups.extend(_groups(item, path + [key]))
     return groups
 
@@ -148,7 +151,10 @@ def describe(path):
             tabs.append({'id': tab, 'groups': groups})
     sources = doc.get('sources')
     order = [k for k, v in sources.items() if isinstance(v, Table)] if isinstance(sources, Table) else []
-    return {'version': version(text), 'tabs': tabs, 'sources_order': order}
+    anki = doc.get('anki')
+    saved = anki.get('saved_decks') if isinstance(anki, Table) else None
+    decks = [[name, value] for name, value in saved.unwrap().items()] if isinstance(saved, Table) else []
+    return {'version': version(text), 'tabs': tabs, 'sources_order': order, 'decks': decks}
 
 
 def _coerce(path, existing, value):
@@ -207,10 +213,7 @@ def _reorder_sources(doc, order):
         return False
     tables = {k: sources[k] for k in current}
     # Comments after the last dictionary introduce the next section; keep them at the end.
-    body = tables[current[-1]].value.body
-    tail = []
-    while body and body[-1][0] is None:
-        tail.insert(0, body.pop())
+    tail = _detach_tail(tables[current[-1]])
     for key in current:
         del sources[key]
     for key in order:
@@ -219,11 +222,48 @@ def _reorder_sources(doc, order):
     return True
 
 
+def _detach_tail(table):
+    """Remove trailing comments/blank lines (they introduce the next section) and return them."""
+    body = table.value.body
+    tail = []
+    while body and body[-1][0] is None:
+        tail.insert(0, body.pop())
+    return tail
+
+
+def _set_decks(doc, decks):
+    if (not isinstance(decks, list) or not all(isinstance(d, list) and len(d) == 2 for d in decks)
+            or not all(isinstance(n, str) and n.strip() and type(i) is int and 1 <= i <= 2**63 - 1 for n, i in decks)):
+        raise EditError('Saved decks need a name and a whole-number deck ID >= 1')
+    names = [n.strip() for n, _ in decks]
+    if len(set(names)) != len(names) or len({i for _, i in decks}) != len(decks):
+        raise EditError('Every saved deck needs its own name and deck ID')
+    anki = doc.get('anki')
+    if not isinstance(anki, Table):
+        raise EditError('config.toml has no [anki] section')
+    table = anki.get('saved_decks')
+    if isinstance(table, Table):
+        tail = _detach_tail(table)
+        for key in list(table.keys()):
+            del table[key]
+    else:
+        tail = _detach_tail(anki)
+        table = tomlkit.table()
+        table.add(tomlkit.comment('Saved decks (name = deck_id). Pick one in the GUI, or copy it into deck_name/deck_id.'))
+        anki.append('saved_decks', table)
+    for name, deck in decks:
+        table.append(SingleKey(name.strip(), KeyType.Basic), deck)  # Always quoted, like hand-written names.
+    table.value.body.extend(tail)  # The next section's heading comments stay after the list.
+
+
 def apply_changes(text, changes, sources_order=None):
     """Return config text with changes applied; comments and layout are kept."""
     doc = tomlkit.parse(text)
     for change in changes:
         path = change.get('path')
+        if path == DECKS and 'decks' in change:
+            _set_decks(doc, change['decks'])
+            continue
         if not isinstance(path, list) or not path or not all(isinstance(p, str) for p in path):
             raise EditError('Invalid setting path')
         parent = _container(doc, path[:-1]) if len(path) > 1 else doc

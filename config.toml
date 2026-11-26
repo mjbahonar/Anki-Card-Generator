@@ -53,6 +53,8 @@ word_column = 0                # First input column; zero-based index
 deduplicate = true
 order = "excel"                # excel = worksheet order; random = shuffle on each run
 max_words = 0                  # 0 = all valid records
+first_row = 0                  # First Excel row to read (row number in Excel); 0 = from the top
+last_row = 0                   # Last Excel row to read; 0 = to the end. Wrong values stop the run
 
 # ======================================================================
 # 03. DICTIONARY SOURCES
@@ -185,10 +187,14 @@ filename_prefix = "words"      # Name: <input file>_<prefix>_<date-time>
 autosave_every = 5              # Recovery CSV after every 5 records; 0 disables
 
 [anki]
-deck_name = "My Vocabulary"
-deck_id = 2059400451            # Keep fixed after the first import
+deck_name = "My Vocabulary"     # Active deck; do not change a deck's name after its first import
+deck_id = 2059400451            # Active deck's ID; keep fixed after the first import
 model_id = 1559328451           # Existing vocabulary model; do not change
-# For a separate deck, use a separate deck_id and deck_name.
+
+# Saved decks (name = deck_id). Switch in the GUI (python main.py --gui),
+# or copy a name and ID into deck_name/deck_id above. Each deck needs its own ID.
+[anki.saved_decks]
+"My Vocabulary" = 2059400451
 
 # ======================================================================
 # 07. APPEARANCE AND INFO

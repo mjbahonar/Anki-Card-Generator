@@ -5,7 +5,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = {
   token: '', lang: localStorage.getItem('gui.lang') || 'en', strings: {}, info: null,
   schema: null, fields: new Map(), baseline: new Map(), values: new Map(), invalid: new Set(),
-  order: [], baseOrder: [], tab: localStorage.getItem('gui.tab') || 'languages', open: new Set(),
+  order: [], baseOrder: [], decks: [], baseDecks: [], tab: localStorage.getItem('gui.tab') || 'languages', open: new Set(),
   job: { running: false }, logNext: 0, poller: null, busy: false,
 };
 
@@ -89,11 +89,13 @@ function changedPaths() {
   return [...state.values.keys()].filter((key) => !same(state.values.get(key), state.baseline.get(key)));
 }
 function orderChanged() { return !same(state.order, state.baseOrder); }
-function dirtyCount() { return changedPaths().length + (orderChanged() ? 1 : 0); }
+function decksChanged() { return !same(state.decks, state.baseDecks); }
+function dirtyCount() { return changedPaths().length + (orderChanged() ? 1 : 0) + (decksChanged() ? 1 : 0); }
 function tabDirty(tab) {
   const changed = new Set(changedPaths());
   return tab.groups.some((g) => g.fields.some((f) => changed.has(dotted(f.path))))
-    || (tab.id === 'dictionaries' && orderChanged());
+    || (tab.id === 'dictionaries' && orderChanged())
+    || (tab.groups.some((g) => dotted(g.path) === 'anki') && decksChanged());
 }
 
 function setValue(field, value) {
@@ -127,6 +129,11 @@ async function load(keepBanner = false) {
   }
   state.order = [...info.schema.sources_order];
   state.baseOrder = [...info.schema.sources_order];
+  state.baseDecks = info.schema.decks.map((d) => [...d]);
+  state.decks = info.schema.decks.map((d) => [...d]);
+  const active = [state.values.get('anki.deck_name'), state.values.get('anki.deck_id')];
+  // A deck in use but not in the saved list is added, and stored on the next save.
+  if (active[0] !== undefined && !state.decks.some((d) => same(d, active))) state.decks.unshift(active);
   if (!info.schema.tabs.some((tab) => tab.id === state.tab)) state.tab = info.schema.tabs[0].id;
   if (!keepBanner) banner('', '');
   render();
@@ -164,6 +171,7 @@ function renderPage() {
 }
 
 function renderGroup(group) {
+  if (dotted(group.path) === 'anki') return renderDecks(group);
   return el('div', { class: 'card' },
     el('div', { class: 'card-head' }, el('h2', { text: groupTitle(group) }),
       group.help ? el('span', { class: 'hint', text: group.help }) : null),
@@ -224,17 +232,48 @@ function textControl(field, id, value) {
     return el('select', { id, onchange: (e) => setValue(field, e.target.value) },
       options.map((option) => el('option', { value: option, text: option, selected: option === value })));
   }
-  let suggestions = null;
-  if (field.mode === 'suggest') suggestions = field.options;
-  if (field.mode === 'file') {
-    const list = field.extensions.includes('.css') ? state.info.style_files : state.info.input_files;
-    suggestions = list;
-  }
+  if (field.mode === 'file') return fileControl(field, id, value);
+  const suggestions = field.mode === 'suggest' ? field.options : null;
   const input = el('input', { id, type: 'text', value, spellcheck: 'false', oninput: (e) => setValue(field, e.target.value) });
   if (!suggestions || !suggestions.length) return input;
   const listId = id + '-list';
   input.setAttribute('list', listId);
   return el('div', {}, input, el('datalist', { id: listId }, suggestions.map((s) => el('option', { value: s }))));
+}
+
+function fileControl(field, id, value) {
+  const kind = field.extensions.includes('.css') ? 'style' : 'input';
+  const listId = id + '-list';
+  const datalist = el('datalist', { id: listId });
+  const status = el('span', { class: 'file-status' });
+  const fill = (files) => {
+    state.info.input_files = files.input_files;
+    state.info.style_files = files.style_files;
+    const list = kind === 'style' ? files.style_files : files.input_files;
+    datalist.replaceChildren(...list.map((s) => el('option', { value: s })));
+    status.className = 'file-status ' + (files.exists ? 'ok' : 'bad');
+    status.textContent = files.exists ? t('file.found') : t('file.missing');
+  };
+  const check = async () => {
+    try { fill(await api('GET', '/api/files?check=' + encodeURIComponent(input.value))); } catch (e) { status.textContent = e.error; }
+  };
+  let timer = null;
+  const input = el('input', {
+    id, type: 'text', value, spellcheck: 'false', list: listId,
+    oninput: (e) => { setValue(field, e.target.value); clearTimeout(timer); timer = setTimeout(check, 350); },
+  });
+  const browse = el('button', { type: 'button', class: 'btn small', text: t('file.browse'), onclick: async () => {
+    browse.disabled = true;
+    try {
+      const result = await api('POST', '/api/browse', { kind, current: input.value });
+      if (result.path) { input.value = result.path; setValue(field, result.path); }
+      await check();
+    } catch (e) { banner('error', e.error); } finally { browse.disabled = false; }
+  } });
+  const refresh = el('button', { type: 'button', class: 'icon-btn', title: t('file.refresh'), 'aria-label': t('file.refresh'),
+    html: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>', onclick: check });
+  check();
+  return el('div', { class: 'file-control' }, el('div', { class: 'file-row' }, input, browse, refresh), datalist, status);
 }
 
 function chips(field) {
@@ -330,6 +369,54 @@ function renderSources(tab) {
   return list;
 }
 
+function renderDecks(group) {
+  const nameField = state.fields.get('anki.deck_name');
+  const idField = state.fields.get('anki.deck_id');
+  const active = [state.values.get('anki.deck_name'), state.values.get('anki.deck_id')];
+  const use = (deck) => { setValue(nameField, deck[0]); setValue(idField, deck[1]); render(); };
+  const picker = el('select', { 'aria-label': t('deck.active'), onchange: (e) => use(state.decks[Number(e.target.value)]) },
+    state.decks.map((deck, i) => el('option', { value: String(i), text: deck[0] + '  ·  ' + deck[1], selected: same(deck, active) })));
+  const rows = el('div', { class: 'deck-list' }, state.decks.map((deck, i) => {
+    const inUse = same(deck, active);
+    return el('div', { class: 'deck-row' + (inUse ? ' active' : '') },
+      el('span', { class: 'deck-name', text: deck[0] }), el('code', { text: String(deck[1]) }),
+      inUse ? el('span', { class: 'badge', text: t('deck.in_use') })
+        : el('span', { class: 'deck-actions' },
+          el('button', { class: 'btn ghost small', text: t('deck.use'), onclick: () => use(deck) }),
+          el('button', { class: 'btn ghost small', text: t('deck.remove'), onclick: async () => {
+            if (!(await confirmBox(t('deck.remove_confirm', { name: deck[0] })))) return;
+            state.decks = state.decks.filter((_, j) => j !== i);
+            render();
+          } })));
+  }));
+  const nextId = Math.max(0, ...state.decks.map((d) => d[1])) + 1;
+  const newName = el('input', { type: 'text', placeholder: t('deck.name'), 'aria-label': t('deck.name') });
+  const newId = el('input', { type: 'number', value: String(nextId), step: '1', min: '1', 'aria-label': t('deck.id') });
+  const add = () => {
+    const name = newName.value.trim();
+    const id = Number(newId.value);
+    if (!name || state.decks.some((d) => d[0] === name)) { banner('error', t('deck.error_name')); return; }
+    if (!Number.isSafeInteger(id) || id < 1 || state.decks.some((d) => d[1] === id)) { banner('error', t('deck.error_id')); return; }
+    banner('', '');
+    state.decks = [...state.decks, [name, id]];
+    use([name, id]);
+  };
+  newName.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  const row = (title, control, help) => el('div', { class: 'field' },
+    el('div', { class: 'field-label' }, el('label', { text: title })), el('div', { class: 'field-control' }, control),
+    help ? el('div', { class: 'field-help', text: help }) : null);
+  const others = group.fields.filter((f) => f.key !== 'deck_name' && f.key !== 'deck_id');
+  const changed = !same(active, [state.baseline.get('anki.deck_name'), state.baseline.get('anki.deck_id')]) || decksChanged();
+  return el('div', { class: 'card' },
+    el('div', { class: 'card-head' }, el('h2', { text: groupTitle(group) }), changed ? el('span', { class: 'changed-dot' }) : null),
+    el('div', { class: 'card-body' },
+      row(t('deck.active'), picker, t('deck.active_help')),
+      row(t('deck.saved'), rows, t('deck.saved_help')),
+      row(t('deck.add'), el('div', { class: 'deck-add' }, newName, newId,
+        el('button', { class: 'btn', text: t('deck.add_button'), onclick: add })), t('deck.add_help')),
+      others.map(renderField)));
+}
+
 function renderCacheTools() {
   const select = el('select', { 'aria-label': t('cache.source') },
     state.info.cache_sources.map((s) => el('option', { value: s, text: t('source.' + s, {}, humanize(s)) })));
@@ -411,6 +498,7 @@ async function save() {
   state.busy = true; refreshChrome();
   try {
     const changes = changedPaths().map((key) => ({ path: state.fields.get(key).path, value: state.values.get(key) }));
+    if (decksChanged()) changes.push({ path: ['anki', 'saved_decks'], decks: state.decks });
     const result = await api('POST', '/api/save', {
       changes, sources_order: orderChanged() ? state.order : null, version: state.schema.version,
     });
@@ -498,6 +586,7 @@ async function boot() {
     if (!(await confirmBox(t('confirm.discard')))) return;
     for (const [key, value] of state.baseline) state.values.set(key, clone(value));
     state.order = [...state.baseOrder];
+    state.decks = state.baseDecks.map((d) => [...d]);
     state.invalid.clear();
     render();
   });

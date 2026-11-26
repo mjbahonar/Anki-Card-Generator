@@ -20,7 +20,7 @@ Advanced configuration, source behavior, exercise rules, cache maintenance and d
 | Section | Settings |
 | --- | --- |
 | `language` | Input language (`no` or `en`, etc.) and translation target (`fa`, etc.) |
-| `input` | Excel file, sheet name/index, header, column name/index, duplicate removal and word limit |
+| `input` | Excel file, sheet name/index, header, column name/index, duplicate removal, word limit and optional `first_row`/`last_row` range |
 | `sources.*` | Enable/disable each dictionary; section order controls display order |
 | `audio` | Enable audio, provider priority, US/UK accent, media directory, caching and optional copy to Anki media |
 | `output` | Directory, filename prefix, selected formats and recovery autosave interval |
@@ -30,6 +30,8 @@ Advanced configuration, source behavior, exercise rules, cache maintenance and d
 | `info` | English footer text and link, or disable it |
 
 Relative paths are resolved from the configuration file's directory, regardless of the working directory. Sheet/column indices start at **0**. A column name requires `header = true`.
+
+`input.first_row` and `input.last_row` limit reading to Excel rows (the row numbers shown in Excel, header included); `0` means no limit on that side. They apply before `max_words` and before `order = "random"` shuffles. A reversed range is a configuration error, and a range that contains no words stops `--check` and the run with the last row that has a word. Rows outside the range are ignored, not reported as skipped.
 
 `runtime.source_timeout_seconds = 30` sets a shared time budget for each word/source, including retries, multiple entry pages and inflection waits. Each network operation uses the remaining budget; after it expires the source is skipped and processing continues. `0` disables this budget. `runtime.timeout_seconds = 30` separately limits an individual network operation and also applies to audio requests. Cleanup and local processing may add a little time beyond the network budget.
 
@@ -92,6 +94,19 @@ Only the input headword's pronunciation is downloaded. `[audio.word]` chooses pr
 
 After the first import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
 
+To switch between several decks, list them under `[anki.saved_decks]` as `"Deck name" = deck_id`. Only `deck_name` and `deck_id` decide where cards go; the list is a convenience for switching (the GUI shows it as a deck picker with add and remove). Each saved deck needs its own ID. The list is optional, so older configs remain valid.
+
+```toml
+[anki]
+deck_name = "Norwegian Basics"
+deck_id = 2059400454
+model_id = 1559328451
+
+[anki.saved_decks]
+"Norwegian Basics" = 2059400454
+"Norwegian Grammar" = 2059400455
+```
+
 ## Settings GUI
 
 `python main.py --gui` starts a small local server on `127.0.0.1` and opens the settings page in your browser. Options: `--port N` for a fixed port and `--no-browser` to only print the link. Press Ctrl+C in the terminal to close it.
@@ -99,6 +114,8 @@ After the first import, keep the deck/model IDs fixed. Disabling or reordering s
 - **One settings file.** The GUI reads and writes `config.toml` only. Edits replace values in place, so comments, spacing and key order are kept; dictionaries can be reordered, which changes their display order on cards. Before writing, the result is validated with the same rules as `main.py`. A missing workbook or style file is reported as a warning after saving.
 - **Outside edits are safe.** If `config.toml` was changed in an editor after the page loaded, saving is refused until you reload.
 - **Run, Check, Stop.** These start `main.py` as a separate process, exactly like the command line, so every run reads `config.toml` from disk. Unsaved changes are saved first. **Stop** works like Ctrl+C: finished words are saved as a `_partial` file. Pressing Stop a second time ends the process immediately.
+- **Workbook and style files**: type a path or use **Browse…** (the Windows file dialog on this computer). The refresh button rescans the folder and checks that the file exists.
+- **Decks** (Output & deck page): pick the active deck from `[anki.saved_decks]`, add a new deck (the next free ID is suggested) or remove one from the list. Removing it from the list does not change Anki.
 - **Cache maintenance** (Advanced page) runs `--clear-source-cache` for one dictionary.
 - **Security.** The server listens on localhost only. API requests need a random per-session token from the printed link, and requests from other hosts or web origins are refused.
 - **Languages.** The interface is English. Its text lives in `app/gui/i18n.py`; to add a language, copy the `en` table under a new code and translate it (`dir = 'rtl'` for Persian or Arabic). Missing keys fall back to English, and a language picker appears once there is more than one.

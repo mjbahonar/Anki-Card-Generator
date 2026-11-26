@@ -36,7 +36,7 @@ class ConfigDocTests(unittest.TestCase):
                     yield from leaves(value, prefix + (key,))
                 else:
                     yield '.'.join(prefix + (key,))
-        self.assertEqual(set(fields), set(leaves(data)))
+        self.assertEqual(set(fields), {k for k in leaves(data) if not k.startswith('anki.saved_decks.')})
         self.assertEqual(fields['sources.lexin.enabled']['type'], 'bool')
         self.assertEqual(fields['sources.lexin.variant']['mode'], 'select')
         self.assertEqual(fields['output.formats']['mode'], 'ordered')
@@ -87,6 +87,32 @@ class ConfigDocTests(unittest.TestCase):
                 config_doc.apply_changes(self.text, changes)
         with self.assertRaises(config_doc.EditError):
             config_doc.apply_changes(self.text, [], ['lexin'])
+
+    def test_saved_decks_are_created_replaced_and_validated(self):
+        decks = [['My Vocabulary', 2059400451], ['Grammar: verbs', 2059400452]]
+        base = config_doc.apply_changes(self.text, [{'path': ['anki', 'saved_decks'], 'decks': []}])
+        changed = config_doc.apply_changes(base, [{'path': ['anki', 'saved_decks'], 'decks': decks}])
+        self.assertEqual(tomllib.loads(changed)['anki']['saved_decks'],
+                         {'My Vocabulary': 2059400451, 'Grammar: verbs': 2059400452})
+        # The next section's heading comments stay after the list.
+        self.assertLess(changed.index('Grammar: verbs'), changed.index('# 07. APPEARANCE'))
+        self.path.write_bytes(changed.encode('utf-8'))
+        self.assertEqual(config_doc.describe(self.path)['decks'], decks)
+        replaced = config_doc.apply_changes(changed, [{'path': ['anki', 'saved_decks'], 'decks': [['Only', 5]]}])
+        self.assertEqual(tomllib.loads(replaced)['anki']['saved_decks'], {'Only': 5})
+        self.assertEqual(replaced.count('# 07. APPEARANCE'), 1)
+        for bad in ([['A', 1], ['B', 1]], [['A', 1], ['A', 2]], [['', 1]], [['A', 0]], [['A', '1']], 'A'):
+            with self.subTest(decks=bad), self.assertRaises(config_doc.EditError):
+                config_doc.apply_changes(self.text, [{'path': ['anki', 'saved_decks'], 'decks': bad}])
+
+    def test_main_accepts_saved_decks_and_rejects_shared_ids(self):
+        from app.app_config import load_config
+        text = config_doc.apply_changes(self.text, [{'path': ['anki', 'saved_decks'], 'decks': [['A', 7], ['B', 8]]}])
+        self.path.write_bytes(text.encode('utf-8'))
+        self.assertEqual(load_config(self.path, check_files=False).data['anki']['saved_decks'], {'A': 7, 'B': 8})
+        self.path.write_bytes(text.replace('"B" = 8', '"B" = 7').encode('utf-8'))
+        with self.assertRaises(ConfigError):
+            load_config(self.path, check_files=False)
 
     def test_save_validates_with_main_rules_and_detects_outside_edits(self):
         version = config_doc.version(self.text)
@@ -154,6 +180,11 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200, data)
         self.assertFalse(tomllib.loads(self.path.read_text(encoding='utf-8'))['runtime']['headless'])
         self.assertEqual(self.request('POST', '/api/save', body)[0], 409)  # Old version: conflict.
+        status, data = self.request('GET', '/api/files?check=' + 'config.toml')
+        self.assertEqual((status, json.loads(data)['exists']), (200, True))
+        status, data = self.request('GET', '/api/files?check=' + 'missing%20book.xlsx')
+        self.assertFalse(json.loads(data)['exists'])
+        self.assertEqual(self.request('POST', '/api/browse', {'kind': 'anything'})[0], 400)
         self.assertEqual(self.request('POST', '/api/run', {'kind': 'format_disk'})[0], 400)
         self.assertEqual(self.request('POST', '/api/run', {'kind': 'clear_cache', 'source': '../x'})[0], 400)
 

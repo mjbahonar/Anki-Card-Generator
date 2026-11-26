@@ -2,7 +2,7 @@
 
 Turn your Excel list into a ready-to-import Anki deck, with dictionary meanings, examples and pronunciation. Start with words alone, or add typing, speaking, listening and gap exercises in the same workbook.
 
-[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.5.0**
+[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.6.0**
 
 ## How it works
 
@@ -40,12 +40,13 @@ Edit the existing sections in **`config.toml`**:
 | `input.file` | Your Excel file, such as `Input.xlsx` |
 | `language.source` | Vocabulary language: `no` for Norwegian or `en` for English |
 | `sources.*.enabled` | The dictionaries you want on your cards |
-| `anki.deck_name` | Your deck name |
+| `anki.deck_name` | Your deck name (keep several under `[anki.saved_decks]` and switch between them) |
 | `input.max_words` | `3` for a small trial; `0` for the full list |
+| `input.first_row` / `input.last_row` | Only these Excel rows, e.g. `10` to `50`; `0` = no limit. A range without words stops the run with an error |
 
 The distributed configuration enables only **Lexin Bokmål–English**. For English, set the source language to `en` and enable compatible sources such as Cambridge, Oxford or Fastdic. Changing the language does not enable dictionaries automatically.
 
-Prefer forms over editing text? Run `python main.py --gui` to open a settings window in your browser. It edits the same `config.toml` (comments are kept), and its **Check** and **Run** buttons start the same commands as below. Keep the terminal open while you use it.
+Prefer forms over editing text? Run `python main.py --gui` to open a settings window in your browser. It edits the same `config.toml` (comments are kept): choose the workbook with **Browse…**, switch or add decks, turn and reorder dictionaries, and use **Check**, **Run** and **Stop**, which start the same commands as below. Keep the terminal open while you use it.
 
 Tip: in VS Code, install the recommended **Even Better TOML** extension for colored, validated `config.toml` editing.
 

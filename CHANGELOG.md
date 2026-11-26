@@ -1,10 +1,15 @@
 # Release notes
 
-## Unreleased
+## v5.6.0 — 2026-11-26
 
 - Added a settings GUI: `python main.py --gui` opens a local browser page that edits `config.toml` in place (comments kept, validated with the same rules as `main.py`), reorders dictionaries, and has Check, Run and Stop buttons with a live log. Stop saves finished words like Ctrl+C. The interface is English; its text is in `app/gui/i18n.py` so other languages can be added later. New dependency: `tomlkit`. `app.api`, card output and the Anki schema are unchanged.
+- Added optional `[anki.saved_decks]` (`"Deck name" = deck_id`) for switching between decks. Only `deck_name`/`deck_id` decide the output deck; each saved deck needs its own ID. The GUI shows the list as a deck picker with add and remove. Older configs without the list remain valid.
+- Added `input.first_row` / `input.last_row`: read only an Excel row range (row numbers as shown in Excel; `0` = no limit). A reversed range or a range without words stops `--check` and the run with an error. Applied before `max_words` and random order.
+- Settings GUI: **Browse…** opens the Windows file dialog for the workbook and style file; a refresh button rescans the folder and shows whether the file exists.
 - Ctrl+Break on Windows now stops a run the same way as Ctrl+C (finished words are saved).
 - Added `python main.py --clear-source-cache SOURCE`: removes every cached result of one dictionary (for example `images`), its unused database backups and `Cache/media` archive files, then compacts the database. Other dictionaries' cache, the `Audio`/`Images` folders and cards are unchanged.
+- Compatibility: backward-compatible minor release. All new settings are optional, so older `config.toml` files remain valid; CLI behavior without the new options is unchanged. Anki fields, model IDs and note GUIDs are unchanged, and `app.api` (used by flash-cards) is unchanged. New dependency: `tomlkit` (run `python -m pip install -r requirements.txt`).
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check` on a local workbook, `git diff --check`, and the flash-cards tests against this version. In the browser: saving keeps comments, dictionary reordering, deck switching/adding, Check and Run with live log, Stop saving a partial file, workbook found/missing indicator, row-range errors. `--clear-source-cache images` shrank a real cache from 74 MB to 26 MB. Known limitations: the Browse dialog uses Tk and was checked to open from the server thread, not clicked through in an automated test; after Stop, Playwright may print shutdown warnings in the log.
 
 ## v5.5.0 — 2026-11-24
 

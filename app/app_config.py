@@ -57,7 +57,8 @@ def load_config(path, check_files=True):
             if key not in data[section]:
                 raise ConfigError(f'Missing {section}.{key}')
         optional = ({'source_timeout_seconds'} if section == 'runtime' else
-                    {'order'} if section == 'input' else {'word'} if section == 'audio' else set())
+                    {'order', 'first_row', 'last_row'} if section == 'input' else {'word'} if section == 'audio' else
+                    {'saved_decks'} if section == 'anki' else set())
         if section != 'sources' and set(data[section]) - set(keys) - optional:
             raise ConfigError(f'Unknown setting in [{section}]: {set(data[section]) - set(keys) - optional}')
     cache = data.setdefault('dictionary_cache', {'enabled': True, 'path': 'Cache/dictionaries.sqlite3', 'refresh': False})
@@ -102,6 +103,20 @@ def load_config(path, check_files=True):
             raise ConfigError(f'{section}.{key} must be an integer >= {minimum}')
         if section == 'anki' and value > 2**63 - 1:
             raise ConfigError(f'anki.{key} exceeds the supported SQLite integer range')
+    # Optional Excel row range (row numbers as shown in Excel); 0 = no limit on that side.
+    first_row, last_row = data['input'].get('first_row', 0), data['input'].get('last_row', 0)
+    for key, value in (('first_row', first_row), ('last_row', last_row)):
+        if type(value) is not int or value < 0:
+            raise ConfigError(f'input.{key} must be a whole number >= 0 (0 = no limit)')
+    if first_row and last_row and last_row < first_row:
+        raise ConfigError(f'input.last_row ({last_row}) is before input.first_row ({first_row})')
+    # Optional list of decks to switch between (name = deck_id); only deck_name/deck_id are used for output.
+    saved = data['anki'].get('saved_decks', {})
+    if not isinstance(saved, dict) or any(not name.strip() or type(deck) is not int or not 1 <= deck <= 2**63 - 1
+                                          for name, deck in saved.items()):
+        raise ConfigError('anki.saved_decks must map deck names to integer deck IDs >= 1')
+    if len(set(saved.values())) != len(saved):
+        raise ConfigError('anki.saved_decks: every saved deck needs its own deck_id')
     for key in ['timeout_seconds', 'retry_delay_seconds', 'word_delay_seconds']:
         value = data['runtime'][key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < (1 if key == 'timeout_seconds' else 0):

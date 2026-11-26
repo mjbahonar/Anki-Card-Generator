@@ -123,12 +123,17 @@ def read_records(config):
         return '' if pd.isna(value) else str(value).strip()
     records, skipped, seen = [], [], set()
     question_lang, answer_lang = language_settings(config)
+    first_row, last_row = settings.get('first_row', 0), settings.get('last_row', 0)
+    last_line = 0
     for index, row in frame.iterrows():
         question, kind, tags, answer, meaning = [cell(row, i) for i in range(5)]
         if not question:
             continue
         kind = kind.lower() or 'normal'
         line = int(index) + (2 if settings['header'] else 1)
+        last_line = line
+        if line < first_row or (last_row and line > last_row):
+            continue
         reason = ''
         if kind not in KINDS:
             reason = f'Unknown card type {kind!r}'
@@ -155,6 +160,11 @@ def read_records(config):
         if settings['max_words'] and len(records) >= settings['max_words']:
             break
     if not records and not skipped:
+        if first_row or last_row:
+            span = f'{first_row or 1}–{last_row or "end"}'
+            raise ConfigError(f'No words in Excel rows {span} (input.first_row/last_row); '
+                              f'the last word in the sheet is in row {last_line}' if last_line
+                              else 'The selected sheet/column contains no words')
         raise ConfigError('The selected sheet/column contains no words')
     if any(record['Kind'] != 'normal' for record in records):
         from app.excel_formatting import read_question_formats
