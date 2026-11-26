@@ -152,8 +152,12 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
                              verbose=True, on_error=None, remaining_timeout=None, variant='bokmal',
                              table_audio=False, on_table_media=None, audio_cache=True, table_fallback=None, on_entry=None,
-                             table_cached_fallback=None, max_entries=2):
-    """Inspect only the first max_entries results; return exact matches and one headword sound."""
+                             table_cached_fallback=None, max_entries=2, on_not_found=None):
+    """Inspect only the first max_entries results; return exact matches and one headword sound.
+
+    on_not_found() is called only when Lexin answered and the word is definitely absent:
+    the page says "Ingen treff" or none of the inspected results is an exact headword match.
+    Timeouts and other failures go to on_error instead."""
     def log(message):
         if verbose:
             print(message)
@@ -171,7 +175,14 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
     try:
         page.goto(f'https://lexin.oslomet.no/#/findwords/message.{variant}-english?q=' + quote(str(word), safe=''),
                   wait_until='domcontentloaded', timeout=timeout_ms())
-        page.locator('.search-table ' + lemma_selector).first.wait_for(timeout=timeout_ms())
+        results = page.locator('.search-table ' + lemma_selector)
+        no_results = page.locator('div.text-danger', has_text='Ingen treff')
+        results.or_(no_results).first.wait_for(timeout=timeout_ms())
+        if not results.count() and no_results.count():
+            log(f'[LEXIN] Ingen treff for {word!r}')
+            if on_not_found:
+                on_not_found()
+            return '', ''
         audio_attempted = False
         table_native_state = {'unavailable': False}
         entries = page.locator('ul.search-table')
@@ -220,6 +231,8 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                 contents[-1] = render_lexin_entry(entry.inner_html(), variant, sounds)
         if not contents:
             log(f'[LEXIN] No exact headword for {word!r}')
+            if on_not_found:
+                on_not_found()
     except Exception as exc:
         if on_error:
             on_error('lexin', exc)

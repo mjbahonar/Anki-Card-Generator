@@ -206,7 +206,7 @@ Native typing accepts one answer line; multiline type answers are skipped with a
 
 The database stores the exact generated card HTML, original fetched entry HTML and byte-for-byte backups of downloaded media. Original image-search files are retained alongside the resized card copies. Original entry images and directly exposed MP3 URLs (including Oxford pronunciation) are archived in `Cache/media`, even when the card renderer omits them. Dynamically generated Lexin headword/table audio is saved when enabled; site controls requiring other interactions are not automatically executed. This archives received entries, not an entire dictionary website. Archived-only assets do not change card appearance or audio priority.
 
-Audio used by cards stays in the configured `[audio].directory` (default `Audio`); card images stay in `[output].directory/media` (currently `Output/media`). Cache hits restore missing or changed files from database backups and register card media for APKG and optional copying to `[media].anki_directory`. Existing downloaded audio is reused; older text/image results are populated on their first successful run after this update. Empty, failed, timed-out or incomplete results are retried rather than cached. Cache errors produce warnings and allow fetching to continue.
+Audio used by cards stays in the configured `[audio].directory` (default `Audio`); card images stay in `[output].directory/media` (currently `Output/media`). Cache hits restore missing or changed files from database backups and register card media for APKG and optional copying to `[media].anki_directory`. Existing downloaded audio is reused; older text/image results are populated on their first successful run after this update. Failed, timed-out or incomplete results are retried rather than cached. A word that a dictionary *definitely* does not have is remembered (see below); other empty results are retried. Cache errors produce warnings and allow fetching to continue.
 
 Set `dictionary_cache.refresh = true` to fetch again and replace successful results; then return it to `false` for reuse. `enabled = false` disables dictionary caching. Paths are relative to `config.toml`. The cache is local and ignored by Git; back up the SQLite file to preserve entries and media together. No extra database dependency or server is needed.
 
@@ -217,6 +217,16 @@ To inspect the database visually, install [DB Browser for SQLite](https://sqlite
 ```sql
 SELECT word, source, saved_at, sound FROM results ORDER BY source, word;
 ```
+
+### Words a dictionary does not have
+
+When Lexin answers and the word is not in it — the page says *Ingen treff*, or none of the inspected results is an exact headword match — the cache stores a "not found" result (empty content) and later runs skip the lookup instead of waiting for the browser again. The run shows `EMPTY` followed by `CACHE not in lexin (saved earlier)`. It never expires. Timeouts, network or browser errors are never saved as "not found"; with `variant = "both"`, both variants must answer "not found". Changing Lexin settings (for example `entries` or `variant`) gives a separate cache entry, so the word is checked again.
+
+To check a word again: `python main.py --refresh-word WORD [--source SOURCE]` deletes its cached results and looks it up now with the enabled dictionaries; `--clear-cache WORD` only deletes; `refresh = true` rechecks everything; the GUI's **Database** page can forget all "not found" results of a dictionary.
+
+### Database page in the GUI
+
+The **Database** page of `python main.py --gui` shows the cache file size, number of words and results, "not found" results, stored audio/media and text per dictionary. Search words (with dictionary and found/not-found filters), open a result to see its saved card content, settings and media, **Fetch again** (runs `--refresh-word` for that dictionary) or **Delete** it. Maintenance: **Compact file** (`VACUUM`), **Recheck not found** per dictionary and **Clear cache** for a whole dictionary. Changes that write to the database wait while a run is in progress. Deleting a result keeps the audio and image files in your folders.
 
 ### Exact Lexin matching
 

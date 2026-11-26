@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import secrets
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -108,6 +109,11 @@ class GuiApp:
     def _settings(self):
         with self.config_path.open('rb') as stream:
             return tomllib.load(stream)
+
+    def cache(self):
+        from app.dictionary_cache import DictionaryCache
+        cache = self._settings().get('dictionary_cache', {})
+        return DictionaryCache(self.resolve(cache.get('path', 'Cache/dictionaries.sqlite3')))
 
     def resolve(self, value):
         path = Path(str(value)).expanduser()
@@ -229,9 +235,21 @@ def make_handler(app, port_holder):
                     return self._send(HTTPStatus.OK, app.state(params.get('lang')))
                 if route == '/api/files':
                     return self._send(HTTPStatus.OK, app.files(params.get('check')))
+                if route == '/api/db/stats':
+                    return self._send(HTTPStatus.OK, app.cache().stats())
+                if route == '/api/db/search':
+                    status = params.get('status') or None
+                    if status not in (None, 'found', 'not_found'):
+                        raise ValueError('Unknown status filter')
+                    return self._send(HTTPStatus.OK, app.cache().search(
+                        params.get('q', ''), params.get('source') or None, status,
+                        limit=min(int(params.get('limit', 100)), 500), offset=max(0, int(params.get('offset', 0)))))
+                if route == '/api/db/entry':
+                    entry = app.cache().entry(params.get('key', ''))
+                    return self._send(HTTPStatus.OK if entry else HTTPStatus.NOT_FOUND, entry or {'error': 'Not found'})
                 if route == '/api/job':
                     return self._send(HTTPStatus.OK, app.job_state(int(params.get('since', 0))))
-            except (OSError, ValueError, ConfigError) as exc:
+            except (OSError, ValueError, ConfigError, sqlite3.Error) as exc:
                 return self._send(HTTPStatus.BAD_REQUEST, {'error': str(exc)})
             return self._send(HTTPStatus.NOT_FOUND, {'error': 'Not found'})
 
@@ -252,6 +270,14 @@ def make_handler(app, port_holder):
                         extra = []
                     elif kind == 'check':
                         extra = ['--check']
+                    elif kind == 'refresh_word':
+                        from app.sources import SOURCE_SPECS
+                        word, source = str(body.get('word') or '').strip(), body.get('source')
+                        if not word or '\n' in word:
+                            raise ValueError('Word must not be blank')
+                        if source is not None and source not in SOURCE_SPECS:
+                            raise ValueError('Unknown dictionary')
+                        extra = ['--refresh-word=' + word] + (['--source', source] if source else [])
                     elif kind == 'clear_cache':
                         from app.sources import SOURCE_SPECS
                         source = body.get('source')
@@ -262,6 +288,20 @@ def make_handler(app, port_holder):
                         raise ValueError('Unknown task')
                     app.start(kind, extra)
                     return self._send(HTTPStatus.OK, app.job_state())
+                if self.path.startswith('/api/db/'):
+                    if app.job and app.job.running:  # A run writes to the same database.
+                        return self._send(HTTPStatus.CONFLICT, {'error': 'busy'})
+                    cache = app.cache()
+                    if self.path == '/api/db/delete':
+                        keys = body.get('keys')
+                        if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+                            raise ValueError('keys must be a list')
+                        return self._send(HTTPStatus.OK, {'removed': cache.delete_keys(keys)})
+                    if self.path == '/api/db/forget_not_found':
+                        return self._send(HTTPStatus.OK, {'removed': cache.delete_not_found(body.get('source') or None)})
+                    if self.path == '/api/db/compact':
+                        before, after = cache.compact()
+                        return self._send(HTTPStatus.OK, {'before': before, 'after': after})
                 if self.path == '/api/stop':
                     return self._send(HTTPStatus.OK, {'stopped': app.stop()})
                 if self.path == '/api/browse':
@@ -276,7 +316,7 @@ def make_handler(app, port_holder):
                 return self._send(HTTPStatus.CONFLICT, {'error': 'conflict'})
             except RuntimeError as exc:
                 return self._send(HTTPStatus.CONFLICT, {'error': str(exc)})
-            except (OSError, ValueError, KeyError, ConfigError) as exc:
+            except (OSError, ValueError, KeyError, ConfigError, sqlite3.Error) as exc:
                 return self._send(HTTPStatus.BAD_REQUEST, {'error': str(exc)})
             return self._send(HTTPStatus.NOT_FOUND, {'error': 'Not found'})
 

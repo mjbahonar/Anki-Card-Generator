@@ -173,6 +173,8 @@ def run(config, context_factory=SourceContext):
                                          if error['message'] != 'No exact entry/content received')
                             report.source(name, 'FAIL' if failed else 'EMPTY', started,
                                           context.errors[-1]['message'])
+                            if getattr(context, 'last_not_found', False):
+                                print(f'  CACHE not in {name} (saved earlier); recheck with --refresh-word', flush=True)
                         else:
                             report.source(name, 'OK', started)
                             if getattr(context, 'last_cache_hit', False):
@@ -246,6 +248,36 @@ def run(config, context_factory=SourceContext):
     return 2 if interrupted else (1 if failures or fatal else 0)
 
 
+def refresh_word(config_path, word, source=None):
+    """Forget one word's cached results (all settings variants) and fetch it again now."""
+    from app import api
+    from app.dictionary_cache import DictionaryCache
+    word = word.strip()
+    if not word:
+        raise ConfigError('--refresh-word word must not be blank')
+    config = load_config(config_path, check_files=False)  # No workbook needed for one word.
+    cache = config.data['dictionary_cache']
+    removed = DictionaryCache(config.resolve(cache['path'])).delete_word(word, source)
+    print(f'Removed {removed} cached results for {word!r} ({source or "all sources"}).', flush=True)
+    enabled = api.enabled_sources(config)
+    names = [source] if source else enabled
+    if source and source not in enabled:
+        print(f'{source} is not enabled in config.toml; it will be fetched the next time it is used.')
+        return 0
+    if not cache.get('enabled', True):
+        print('The dictionary cache is disabled, so the new result is not saved.')
+    print(f'Looking up {word!r}: {", ".join(names)}', flush=True)
+    with api.Lookup(config) as lookup:
+        result = lookup.word(word, sources=names, audio=False)
+    store = DictionaryCache(config.resolve(cache['path']))
+    for item in result.sources:
+        print(f'  {item.status.upper():<5} {item.name}' + (f' | {item.message}' if item.message else ''), flush=True)
+        if item.status == 'empty' and any(row['word'] == word for row in
+                                          store.search(word, item.name, 'not_found', limit=50)['rows']):
+            print(f'        saved as not found: later runs skip {item.name} for this word', flush=True)
+    return 0 if all(item.status != 'fail' for item in result.sources) else 1
+
+
 def main(argv=None):
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
@@ -256,13 +288,16 @@ def main(argv=None):
     modes.add_argument('--clear-cache', metavar='WORD', help='Delete cached dictionary results for one word')
     modes.add_argument('--clear-source-cache', metavar='SOURCE', choices=list(SOURCE_SPECS),
                        help='Delete every cached result of one dictionary and shrink the cache file')
+    modes.add_argument('--refresh-word', metavar='WORD',
+                       help="Delete one word's cached results and look it up again now (enabled dictionaries)")
     modes.add_argument('--gui', action='store_true', help='Open the settings window for config.toml')
     parser.add_argument('--port', type=int, default=0, help='Port for --gui (default: any free port)')
     parser.add_argument('--no-browser', action='store_true', help='With --gui, print the link instead of opening it')
-    parser.add_argument('--source', choices=list(SOURCE_SPECS), help='Restrict --clear-cache to one dictionary')
+    parser.add_argument('--source', choices=list(SOURCE_SPECS),
+                        help='Restrict --clear-cache or --refresh-word to one dictionary')
     args = parser.parse_args(argv)
-    if args.source and args.clear_cache is None:
-        parser.error('--source requires --clear-cache')
+    if args.source and args.clear_cache is None and args.refresh_word is None:
+        parser.error('--source requires --clear-cache or --refresh-word')
     if hasattr(signal, 'SIGBREAK'):
         # The GUI's Stop button sends Ctrl+Break on Windows; treat it like Ctrl+C so finished words are saved.
         signal.signal(signal.SIGBREAK, signal.default_int_handler)
@@ -294,6 +329,8 @@ def main(argv=None):
             count = store.delete_word(args.clear_cache, args.source)
             print(f'Removed {count} cached results for {args.clear_cache!r} ({args.source or "all sources"}). Local media files retained.')
             return 0
+        if args.refresh_word is not None:
+            return refresh_word(args.config, args.refresh_word, args.source)
         config = load_config(args.config)
         if args.check:
             records, skipped = read_records(config)

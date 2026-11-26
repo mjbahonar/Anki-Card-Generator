@@ -1,5 +1,13 @@
 # Release notes
 
+## v5.7.0 — 2026-11-26
+
+- Words that Lexin definitely does not have (*Ingen treff*, or no exact headword among the inspected results) are saved as "not found" and skipped on later runs, without expiry. Timeouts and errors are never saved this way. The run log shows `CACHE not in lexin (saved earlier)`.
+- Added `python main.py --refresh-word WORD [--source SOURCE]`: deletes one word's cached results and looks it up again now.
+- Settings GUI: new **Database** page with cache statistics, word search with filters, saved-content preview, Fetch again, Delete, Compact file and "Recheck not found". Cache maintenance moved there from Advanced.
+- Compatibility: backward-compatible minor release. No configuration changes are needed; the database structure is unchanged (a "not found" result is a result with empty content). Anki fields, model IDs, note GUIDs and `app.api` are unchanged; flash-cards also skips cached "not found" words. Existing caches keep working; words that were never saved because Lexin had no entry are checked once more and then remembered.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check` on a local workbook, `git diff --check` and the flash-cards tests. Live on a copy of a real cache: `--refresh-word` saved *xqzvbrt* (Ingen treff) and *husene* (no exact headword) as not found and found *hus* normally. In the browser: Database statistics, search and filters, content preview, Fetch again, Delete and Compact.
+
 ## v5.6.1 — 2026-11-26
 
 - Fixed the settings GUI marking a worksheet name (for example `FINAL`) as invalid in **Worksheet** (`input.sheet`). Worksheet and **Input column** (`input.word_column`) now accept a name or a zero-based number in the GUI, as `config.toml` always allowed. Digits are saved as a position (`2` = third sheet); anything else is saved as a name.

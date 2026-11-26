@@ -204,6 +204,30 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request('POST', '/api/run', {'kind': 'clear_cache', 'source': '../x'})[0], 400)
 
 
+class DatabaseEndpointTests(ServerTests):
+    def test_database_tab_reads_the_configured_cache_and_waits_for_runs(self):
+        from unittest.mock import Mock
+        from app.dictionary_cache import DictionaryCache
+        self.assertFalse(json.loads(self.request('GET', '/api/db/stats')[1])['exists'])
+        store = DictionaryCache(self.path.parent / 'Cache' / 'dictionaries.sqlite3')
+        store.put('k1', 'lexin', 'hus', '<p>house</p>', '', [], [])
+        store.put('k2', 'lexin', 'xqz', '', '', [], [])
+        stats = json.loads(self.request('GET', '/api/db/stats')[1])
+        self.assertEqual((stats['results'], stats['not_found']), (2, 1))
+        found = json.loads(self.request('GET', '/api/db/search?q=hu&status=found')[1])
+        self.assertEqual([r['word'] for r in found['rows']], ['hus'])
+        self.assertEqual(self.request('GET', '/api/db/search?status=bogus')[0], 400)
+        self.assertEqual(json.loads(self.request('GET', '/api/db/entry?key=k1')[1])['content'], '<p>house</p>')
+        self.assertEqual(self.request('GET', '/api/db/entry?key=nope')[0], 404)
+        self.app.job = Mock(running=True)
+        self.assertEqual(self.request('POST', '/api/db/delete', {'keys': ['k1']})[0], 409)
+        self.app.job = None
+        self.assertEqual(json.loads(self.request('POST', '/api/db/delete', {'keys': ['k1']})[1])['removed'], 1)
+        self.assertEqual(json.loads(self.request('POST', '/api/db/forget_not_found', {})[1])['removed'], 1)
+        self.assertEqual(self.request('POST', '/api/db/compact', {})[0], 200)
+        self.assertEqual(self.request('POST', '/api/run', {'kind': 'refresh_word', 'word': ' '})[0], 400)
+
+
 class StringsTests(unittest.TestCase):
     def test_other_languages_fall_back_to_english(self):
         self.assertEqual(i18n.strings('xx')['action.run'], 'Run')

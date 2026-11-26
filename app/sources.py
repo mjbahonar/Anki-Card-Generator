@@ -183,6 +183,7 @@ class SourceContext:
     def cache_result(self, name, word, loader, audio=False):
         from app.dictionary_cache import cache_key
         self.last_cache_hit = False
+        self.last_not_found = False
         if self.dictionary_cache is None:
             return loader()
         key = cache_key(name, word, self.config, audio)
@@ -203,6 +204,7 @@ class SourceContext:
             cached = None
         if cached is not None:
             content, sound, documents = cached
+            self.last_not_found = not content
             if name == 'lexin':
                 self.lexin_results[word] = (content, sound)
                 if audio:
@@ -213,9 +215,18 @@ class SourceContext:
         capture = {'word': word, 'source': name, 'documents': [], 'archive': set(), 'urls': {}, 'media': set()}
         self.cache_capture = capture
         errors = len(self.errors)
+        self.definitely_absent = False
         try:
             content = loader()
             self.check_budget()
+            if (not content and self.definitely_absent
+                    and not any(e['source'] not in ('media_copy', 'dictionary_media') for e in self.errors[errors:])):
+                # The dictionary answered and the word is not in it: remember that, so later runs skip it.
+                try:
+                    self.dictionary_cache.put(key, name, word, '', '', [], [])
+                except (OSError, sqlite3.Error) as exc:
+                    self.issue(word, 'dictionary_cache', exc)
+                return content
             # Optional archive failures must not discard valid card text/audio.
             # Incomplete dictionary/card fetches still retain the old good result.
             if content and not any(e['source'] not in ('media_copy', 'dictionary_media') for e in self.errors[errors:]):
@@ -381,7 +392,7 @@ class SourceContext:
             'variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
         variants = ('bokmal', 'nynorsk') if variant == 'both' else (variant,)
         primary = variant if variant != 'both' else ('nynorsk' if self.language == 'nn' else 'bokmal')
-        contents, sound = [], ''
+        contents, sound, absent = [], '', []
         for selected in variants:
             with self.page() as page:
                 content, selected_sound = scrape_and_process_lexin(
@@ -397,13 +408,16 @@ class SourceContext:
                     table_fallback=self.table_audio_fallback,
                     table_cached_fallback=self.cached_table_audio_fallback,
                     on_entry=lambda markup: self.capture_entry(markup, page.url),
-                    max_entries=self.config.section('sources').get('lexin', {}).get('entries', 2))
+                    max_entries=self.config.section('sources').get('lexin', {}).get('entries', 2),
+                    on_not_found=lambda selected=selected: absent.append(selected))
             contents.append(content)
             sound = selected_sound or sound
         content = ''.join(contents)
         if sound:
             sound = self.register_audio(self.audio_dir / sound[7:-1])
         self.lexin_results[word] = (content, cached or sound)
+        if not content and len(absent) == len(variants):
+            self.definitely_absent = True  # Every selected Lexin variant answered "not there".
         return content
 
     def close(self):

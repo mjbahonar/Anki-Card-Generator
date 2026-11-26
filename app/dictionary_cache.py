@@ -59,6 +59,132 @@ class DictionaryCache:
             raise
         return db
 
+    # Browsing and maintenance (settings GUI). A result with empty content records that the
+    # dictionary answered and the word is definitely not in it; later runs skip the lookup.
+
+    def stats(self):
+        """Overview: file size, results per source (found / not found) and stored media."""
+        info = {'path': str(self.path), 'exists': self.path.is_file(), 'file_bytes': 0, 'sources': [],
+                'media': [], 'results': 0, 'not_found': 0, 'words': 0, 'media_bytes': 0, 'text_bytes': 0,
+                'oldest': None, 'newest': None}
+        if not info['exists']:
+            return info
+        info['file_bytes'] = self.path.stat().st_size
+        db = self.connect()
+        try:
+            for source, total, missing, text, oldest, newest in db.execute(
+                    "SELECT source, COUNT(*), SUM(content=''), SUM(LENGTH(content)+LENGTH(documents)), "
+                    "MIN(saved_at), MAX(saved_at) FROM results GROUP BY source ORDER BY COUNT(*) DESC"):
+                info['sources'].append({'source': source, 'results': total, 'not_found': missing or 0,
+                                        'text_bytes': text or 0, 'oldest': oldest, 'newest': newest})
+            info['results'] = sum(s['results'] for s in info['sources'])
+            info['not_found'] = sum(s['not_found'] for s in info['sources'])
+            info['text_bytes'] = sum(s['text_bytes'] for s in info['sources'])
+            info['words'] = len({normalize_headword(w) for (w,) in db.execute('SELECT word FROM results')})
+            dates = [s for s in info['sources'] if s['oldest']]
+            if dates:
+                info['oldest'] = min(s['oldest'] for s in dates)
+                info['newest'] = max(s['newest'] for s in dates)
+            for kind, files, size in db.execute(
+                    'SELECT kind, COUNT(*), SUM(LENGTH(data)) FROM (SELECT DISTINCT m.kind, a.digest, a.data '
+                    'FROM result_media m JOIN assets a USING(digest)) GROUP BY kind ORDER BY kind'):
+                info['media'].append({'kind': kind, 'files': files, 'bytes': size or 0})
+            info['media_bytes'] = db.execute('SELECT COALESCE(SUM(LENGTH(data)), 0) FROM assets').fetchone()[0]
+        finally:
+            db.close()
+        return info
+
+    def search(self, query='', source=None, status=None, limit=100, offset=0):
+        """Cached results whose word contains query; status is None, 'found' or 'not_found'."""
+        if not self.path.is_file():
+            return {'total': 0, 'rows': []}
+        where, args = [], []
+        if query.strip():
+            where.append("r.word LIKE ? ESCAPE '!'")
+            args.append('%' + query.strip().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%')
+        if source:
+            where.append('r.source = ?')
+            args.append(source)
+        if status == 'found':
+            where.append("r.content != ''")
+        elif status == 'not_found':
+            where.append("r.content = ''")
+        clause = (' WHERE ' + ' AND '.join(where)) if where else ''
+        db = self.connect()
+        try:
+            total = db.execute('SELECT COUNT(*) FROM results r' + clause, args).fetchone()[0]
+            rows = db.execute(
+                'SELECT r.key, r.word, r.source, r.content = \'\', r.saved_at, LENGTH(r.content) + LENGTH(r.documents), '
+                '(SELECT COUNT(*) FROM result_media m WHERE m.key = r.key), '
+                '(SELECT COALESCE(SUM(LENGTH(a.data)), 0) FROM result_media m JOIN assets a USING(digest) WHERE m.key = r.key) '
+                'FROM results r' + clause + ' ORDER BY r.word COLLATE NOCASE, r.source LIMIT ? OFFSET ?', args + [int(limit), int(offset)]).fetchall()
+        finally:
+            db.close()
+        return {'total': total, 'rows': [
+            {'key': key, 'word': word, 'source': src, 'not_found': bool(missing), 'saved_at': saved,
+             'text_bytes': text or 0, 'media_files': files, 'media_bytes': size}
+            for key, word, src, missing, saved, text, files, size in rows]}
+
+    def entry(self, key):
+        """One cached result: its card HTML and the media file names it restores."""
+        if not self.path.is_file():
+            return None
+        db = self.connect()
+        try:
+            row = db.execute('SELECT word, source, content, sound, saved_at FROM results WHERE key=?', (key,)).fetchone()
+            if row is None:
+                return None
+            media = db.execute('SELECT m.filename, m.kind, LENGTH(a.data) FROM result_media m JOIN assets a USING(digest) '
+                               'WHERE m.key=? ORDER BY m.kind, m.filename', (key,)).fetchall()
+        finally:
+            db.close()
+        word, source, content, sound, saved = row
+        try:
+            settings = json.loads(key)[3]
+        except (ValueError, IndexError, TypeError):
+            settings = {}
+        return {'key': key, 'word': word, 'source': source, 'content': content, 'sound': sound, 'saved_at': saved,
+                'not_found': not content, 'settings': settings,
+                'media': [{'filename': f, 'kind': k, 'bytes': b} for f, k, b in media]}
+
+    def delete_keys(self, keys):
+        """Remove the given results and backups no other result uses; local files stay."""
+        if not self.path.is_file() or not keys:
+            return 0
+        db = self.connect()
+        try:
+            with db:
+                count = sum(db.execute('DELETE FROM results WHERE key=?', (key,)).rowcount for key in keys)
+                db.execute('DELETE FROM assets WHERE NOT EXISTS '
+                           '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+            return count
+        finally:
+            db.close()
+
+    def delete_not_found(self, source=None):
+        """Forget "not in this dictionary" results so those words are looked up again."""
+        if not self.path.is_file():
+            return 0
+        db = self.connect()
+        try:
+            with db:
+                return db.execute("DELETE FROM results WHERE content = ''" + (' AND source = ?' if source else ''),
+                                  (source,) if source else ()).rowcount
+        finally:
+            db.close()
+
+    def compact(self):
+        """Rebuild the file so space from deleted results is returned to the disk."""
+        if not self.path.is_file():
+            return 0, 0
+        before = self.path.stat().st_size
+        db = self.connect()
+        try:
+            db.execute('VACUUM')
+        finally:
+            db.close()
+        return before, self.path.stat().st_size
+
     def delete_word(self, word, source=None):
         """Remove every cached variant for a normalized word; keep local media files."""
         if not self.path.is_file():

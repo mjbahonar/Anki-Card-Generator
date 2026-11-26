@@ -18,6 +18,7 @@ const ICONS = {
   output: '<path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
   appearance: '<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><path d="M12 21a2.5 2.5 0 0 1 0-5h2a3 3 0 0 0 3-3"/>',
   advanced: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   other: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
 };
 const CHEVRON_UP = '<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>';
@@ -120,6 +121,7 @@ async function load(keepBanner = false) {
   $('#language-picker').hidden = info.languages.length < 2;
 
   state.schema = info.schema;
+  info.schema.tabs.push({ id: 'database', groups: [] }); // Cache browser; not part of config.toml.
   state.fields.clear(); state.baseline.clear(); state.values.clear(); state.invalid.clear();
   for (const tab of info.schema.tabs) for (const group of tab.groups) for (const field of group.fields) {
     const key = dotted(field.path);
@@ -166,8 +168,8 @@ function renderPage() {
   $('#page-desc').textContent = t('tab.' + tab.id + '.desc', {}, '');
   const page = $('#page');
   if (tab.id === 'dictionaries') page.replaceChildren(renderSources(tab));
+  else if (tab.id === 'database') page.replaceChildren(renderDatabase());
   else page.replaceChildren(...tab.groups.map(renderGroup));
-  if (tab.id === 'advanced') page.append(renderCacheTools());
 }
 
 function renderGroup(group) {
@@ -420,6 +422,149 @@ function renderDecks(group) {
       others.map(renderField)));
 }
 
+// ---------------------------------------------------------------- database tab
+const db = { q: '', source: '', status: '', rows: [], total: 0, open: new Set(), entries: new Map() };
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return (bytes / 1024 ** i).toFixed(i ? 1 : 0) + ' ' + units[i];
+}
+const sourceName = (s) => t('source.' + s, {}, humanize(s));
+
+async function dbAction(url, body, confirmText) {
+  if (confirmText && !(await confirmBox(confirmText))) return null;
+  try {
+    const result = await api('POST', url, body || {});
+    renderPage();
+    return result;
+  } catch (error) {
+    banner('error', error.error === 'busy' ? t('db.busy') : error.error);
+    return null;
+  }
+}
+
+function renderDatabase() {
+  const wrap = el('div', { class: 'db' });
+  const statsCard = el('div', { class: 'card' }, el('div', { class: 'card-body db-loading', text: t('db.loading') }));
+  const searchCard = el('div', { class: 'card' });
+  wrap.append(statsCard, searchCard, renderCacheTools());
+  loadStats(statsCard);
+  renderSearch(searchCard, true);
+  return wrap;
+}
+
+async function loadStats(card) {
+  let stats;
+  try { stats = await api('GET', '/api/db/stats'); } catch (e) { card.replaceChildren(el('div', { class: 'card-body', text: e.error })); return; }
+  db.sources = stats.sources.map((s) => s.source);
+  const tile = (label, value, sub) => el('div', { class: 'tile' }, el('span', { class: 'tile-label', text: label }),
+    el('strong', { text: value }), sub ? el('span', { class: 'tile-sub', text: sub }) : null);
+  const audio = stats.media.find((m) => m.kind === 'audio') || { files: 0, bytes: 0 };
+  const table = el('table', { class: 'db-table' },
+    el('thead', {}, el('tr', {}, [t('db.source'), t('db.results'), t('db.not_found'), t('db.text'), t('db.last_saved'), ''].map((h) => el('th', { text: h })))),
+    el('tbody', {}, stats.sources.map((s) => el('tr', {},
+      el('td', { text: sourceName(s.source) }), el('td', { text: String(s.results) }),
+      el('td', { text: String(s.not_found) }), el('td', { text: formatBytes(s.text_bytes) }),
+      el('td', { text: s.newest || '' }),
+      el('td', {}, s.not_found ? el('button', { class: 'btn ghost small', text: t('db.forget_not_found'),
+        disabled: state.job.running,
+        onclick: () => dbAction('/api/db/forget_not_found', { source: s.source }, t('db.forget_confirm', { source: sourceName(s.source), count: s.not_found })) }) : null)))));
+  card.replaceChildren(
+    el('div', { class: 'card-head' }, el('h2', { text: t('db.overview') }), el('span', { class: 'hint', text: stats.path }),
+      el('span', { class: 'spacer' }),
+      el('button', { class: 'btn ghost small', text: t('db.refresh'), onclick: () => renderPage() }),
+      el('button', { class: 'btn small', text: t('db.compact'), disabled: state.job.running || !stats.exists, onclick: async () => {
+        const result = await dbAction('/api/db/compact', {});
+        if (result) banner('ok', t('db.compacted', { before: formatBytes(result.before), after: formatBytes(result.after) }));
+      } })),
+    stats.exists ? el('div', { class: 'card-body' },
+      el('div', { class: 'tiles' },
+        tile(t('db.file'), formatBytes(stats.file_bytes)),
+        tile(t('db.words'), String(stats.words), t('db.results_n', { count: stats.results })),
+        tile(t('db.not_found'), String(stats.not_found), t('db.not_found_sub')),
+        tile(t('db.audio'), String(audio.files), formatBytes(audio.bytes)),
+        tile(t('db.media'), formatBytes(stats.media_bytes), stats.media.map((m) => `${m.kind}: ${m.files}`).join(' · ')),
+        tile(t('db.text'), formatBytes(stats.text_bytes), stats.oldest ? t('db.since', { date: stats.oldest.slice(0, 10) }) : '')),
+      table)
+      : el('div', { class: 'card-body', text: t('db.missing') }));
+  const filter = document.querySelector('#db-source');
+  if (filter && filter.options.length <= 1) {
+    filter.append(...db.sources.map((s) => el('option', { value: s, text: sourceName(s), selected: s === db.source })));
+  }
+}
+
+async function renderSearch(card, reset) {
+  if (reset) { db.rows = []; db.total = 0; }
+  const input = el('input', { type: 'search', id: 'db-q', value: db.q, placeholder: t('db.search_placeholder'), 'aria-label': t('db.search') });
+  const source = el('select', { id: 'db-source', 'aria-label': t('db.source') }, el('option', { value: '', text: t('db.all_sources') }),
+    (db.sources || []).map((s) => el('option', { value: s, text: sourceName(s), selected: s === db.source })));
+  const status = el('select', { 'aria-label': t('db.status') }, [['', t('db.all')], ['found', t('db.found')], ['not_found', t('db.not_found')]]
+    .map(([v, label]) => el('option', { value: v, text: label, selected: v === db.status })));
+  const list = el('div', { class: 'db-rows' });
+  const count = el('span', { class: 'hint' });
+  const run = async (more) => {
+    db.q = input.value.trim(); db.source = source.value; db.status = status.value;
+    const offset = more ? db.rows.length : 0;
+    try {
+      const result = await api('GET', `/api/db/search?q=${encodeURIComponent(db.q)}&source=${encodeURIComponent(db.source)}&status=${db.status}&offset=${offset}`);
+      db.rows = more ? db.rows.concat(result.rows) : result.rows;
+      db.total = result.total;
+      drawRows();
+    } catch (e) { list.replaceChildren(el('div', { class: 'empty', text: e.error })); }
+  };
+  const drawRows = () => {
+    count.textContent = t('db.showing', { shown: db.rows.length, total: db.total });
+    list.replaceChildren(...(db.rows.length ? db.rows.map(renderDbRow) : [el('div', { class: 'db-empty', text: t('db.no_rows') })]));
+    if (db.rows.length < db.total) list.append(el('button', { class: 'btn ghost', text: t('db.more'), onclick: () => run(true) }));
+  };
+  let timer = null;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => run(false), 300); });
+  source.addEventListener('change', () => run(false));
+  status.addEventListener('change', () => run(false));
+  card.replaceChildren(
+    el('div', { class: 'card-head' }, el('h2', { text: t('db.search') }), count),
+    el('div', { class: 'card-body' }, el('div', { class: 'db-filters' }, input, source, status), list));
+  run(false);
+}
+
+function renderDbRow(row) {
+  const open = db.open.has(row.key);
+  const details = el('div', { class: 'db-details' });
+  const line = el('div', { class: 'db-row' + (open ? ' open' : '') },
+    el('button', { class: 'db-word', text: row.word, title: t('db.view'), onclick: () => {
+      if (db.open.has(row.key)) db.open.delete(row.key); else db.open.add(row.key);
+      line.replaceWith(renderDbRow(row));
+    } }),
+    el('span', { class: 'db-source', text: sourceName(row.source) }),
+    el('span', { class: 'badge ' + (row.not_found ? 'warn' : 'ok'), text: row.not_found ? t('db.not_found') : t('db.found') }),
+    el('span', { class: 'db-meta', text: [formatBytes(row.text_bytes), row.media_files ? `${row.media_files} ${t('db.files')} · ${formatBytes(row.media_bytes)}` : '', (row.saved_at || '').slice(0, 16)].filter(Boolean).join(' · ') }),
+    el('span', { class: 'db-actions' },
+      el('button', { class: 'btn ghost small', text: t('db.fetch_again'), disabled: state.job.running, title: t('db.fetch_again_help'),
+        onclick: () => start('refresh_word', { word: row.word, source: row.source }) }),
+      el('button', { class: 'btn ghost small danger-text', text: t('db.delete'), disabled: state.job.running,
+        onclick: () => dbAction('/api/db/delete', { keys: [row.key] }, t('db.delete_confirm', { word: row.word, source: sourceName(row.source) })) })),
+    open ? details : null);
+  if (open) loadEntry(row, details);
+  return line;
+}
+
+async function loadEntry(row, box) {
+  box.textContent = t('db.loading');
+  let entry;
+  try { entry = await api('GET', '/api/db/entry?key=' + encodeURIComponent(row.key)); } catch (e) { box.textContent = e.error; return; }
+  const settings = Object.entries(entry.settings || {}).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(' · ');
+  const preview = entry.not_found ? el('p', { class: 'hint', text: t('db.not_found_detail', { source: sourceName(entry.source) }) })
+    : el('iframe', { class: 'db-preview', sandbox: '', title: t('db.preview'),
+      srcdoc: '<!doctype html><meta charset="utf-8"><style>body{font:14px system-ui,sans-serif;margin:12px;color:#222}img{max-width:120px}</style>' + entry.content });
+  box.replaceChildren(...[
+    settings ? el('div', { class: 'hint', text: t('db.settings') + ': ' + settings }) : null,
+    preview,
+    entry.media.length ? el('div', { class: 'db-media' }, entry.media.map((m) => el('code', { text: `${m.kind}: ${m.filename} (${formatBytes(m.bytes)})` }))) : null,
+  ].filter(Boolean));
+}
+
 function renderCacheTools() {
   const select = el('select', { 'aria-label': t('cache.source') },
     state.info.cache_sources.map((s) => el('option', { value: s, text: t('source.' + s, {}, humanize(s)) })));
@@ -560,7 +705,7 @@ async function poll() {
     refreshChrome();
     if (job.running) { state.poller = setTimeout(poll, 500); return; }
     state.poller = null;
-    if (state.tab === 'advanced') renderPage();
+    if (state.tab === 'database') renderPage();
   } catch (error) {
     state.poller = setTimeout(poll, 2000);
     $('#log-status').textContent = error.error;
