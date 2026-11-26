@@ -1,5 +1,6 @@
 """V4 integration tests without external dictionary availability."""
 import copy
+import re
 import json
 from pathlib import Path
 import sqlite3
@@ -312,7 +313,7 @@ class V4Tests(unittest.TestCase):
         path.write_text(text.replace('translation_target', 'translation_targte'), encoding='utf-8')
         with self.assertRaisesRegex(ConfigError, 'translation_target'):
             load_config(path)
-        path.write_text(text.replace('["xlsx", "csv", "apkg", "html", "json"]', '["pdf"]'), encoding='utf-8')
+        path.write_text(re.sub(r'(?m)^formats = \[.*?\]', 'formats = ["pdf"]', text), encoding='utf-8')
         with self.assertRaisesRegex(ConfigError, 'formats'):
             load_config(path)
 

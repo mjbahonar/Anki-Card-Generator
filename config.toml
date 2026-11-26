@@ -184,7 +184,7 @@ fa = ["google_tts"]
 # ======================================================================
 [output]
 directory = "Output"
-formats = ["xlsx", "csv", "apkg", "html", "json"]
+formats = ["xlsx", "csv", "apkg", "html", "json", "report"]
 filename_prefix = "words"      # Name: <input file>_<prefix>_<date-time>
 autosave_every = 5              # Recovery CSV after every 5 records; 0 disables
 

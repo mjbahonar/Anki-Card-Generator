@@ -131,8 +131,8 @@ def load_config(path, check_files=True):
     if isinstance(data['input']['word_column'], str) and not data['input']['header']:
         raise ConfigError('A named word_column requires input.header = true')
     formats = data['output']['formats']
-    if not isinstance(formats, list) or not formats or any(f not in ['xlsx', 'csv', 'apkg', 'html', 'json'] for f in formats):
-        raise ConfigError('output.formats must contain xlsx, csv, apkg, html and/or json')
+    if not isinstance(formats, list) or not formats or any(f not in ['xlsx', 'csv', 'apkg', 'html', 'json', 'report'] for f in formats):
+        raise ConfigError('output.formats must contain xlsx, csv, apkg, html, json and/or report')
     if not re.fullmatch(r'[A-Za-z0-9_-]+', data['output']['filename_prefix']):
         raise ConfigError('output.filename_prefix may contain letters, digits, underscores and hyphens')
     for key in ['source', 'translation_target']:

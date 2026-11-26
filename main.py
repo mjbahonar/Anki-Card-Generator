@@ -52,7 +52,7 @@ def export_outputs(rows, config, stem, context, recovery=False):
     columns = ['Words', 'Kind', 'Answer', 'Tags', 'Meaning', 'FrontField', 'BackField', 'Sound', *display_sources(config), 'Info']
     frame = pd.DataFrame(rows).reindex(columns=columns, fill_value='')
     frame['Tags'] = [' '.join(row.get('Tags', [])) for row in rows]
-    formats = ['csv'] if recovery else list(dict.fromkeys(config.section('output')['formats']))
+    formats = ['csv'] if recovery else [f for f in dict.fromkeys(config.section('output')['formats']) if f != 'report']
     paths, failures = [], []
     for format_name in formats:
         path, temporary = output / f'{stem}.{format_name}', output / f'{stem}.tmp.{format_name}'
@@ -131,6 +131,7 @@ def run(config, context_factory=SourceContext):
             for number, record in enumerate(records, 1):
                 word = record['Words']
                 print(f'\n[{number}/{len(words)}] {word}', flush=True)
+                report.word(number, word, record['Kind'])
                 row = {**record, **{name: '' for name in SOURCE_SPECS}, 'Info': info_html(config)}
                 if row['Kind'] != 'normal':
                     previous = len(context.errors)
@@ -145,11 +146,13 @@ def run(config, context_factory=SourceContext):
                         except Exception as exc:
                             context.issue(word, 'google_tts', exc)
                     print('  AUDIO ' + (row['Sound'][7:-1] if row['Sound'] else 'unavailable or disabled'), flush=True)
+                    report.audio(row['Sound'])
                     for issue in context.errors[previous:]:
                         print(f'  WARN  {issue["source"]}: {concise(issue["message"])}', flush=True)
                     if row['Kind'] == 'listen' and not row['Sound']:
                         context.issue(word, 'listen', 'Skipped: listening card has no audio')
                         print('  SKIP listening card has no audio', flush=True)
+                        report.skip('Listening card has no audio')
                         continue
                     rows.append(render_exercise(row, config))
                     every = config.section('output')['autosave_every']
@@ -163,6 +166,7 @@ def run(config, context_factory=SourceContext):
                 for name in active:
                     started = time.monotonic()
                     previous = len(context.errors)
+                    context.definitely_absent = False
                     try:
                         with context.source_budget():
                             row[name] = dictionary_content(name, word, number, context)
@@ -172,11 +176,14 @@ def run(config, context_factory=SourceContext):
                             failed = any(error['source'] == name for error in context.errors[previous:]
                                          if error['message'] != 'No exact entry/content received')
                             report.source(name, 'FAIL' if failed else 'EMPTY', started,
-                                          context.errors[-1]['message'])
+                                          context.errors[-1]['message'],
+                                          cached=getattr(context, 'last_cache_hit', False),
+                                          not_found=not failed and (getattr(context, 'last_not_found', False)
+                                                                    or getattr(context, 'definitely_absent', False)))
                             if getattr(context, 'last_not_found', False):
                                 print(f'  CACHE not in {name} (saved earlier); recheck with --refresh-word', flush=True)
                         else:
-                            report.source(name, 'OK', started)
+                            report.source(name, 'OK', started, cached=getattr(context, 'last_cache_hit', False))
                             if getattr(context, 'last_cache_hit', False):
                                 print('  CACHE reused saved dictionary result', flush=True)
                             for issue in context.errors[previous:]:
@@ -194,6 +201,7 @@ def run(config, context_factory=SourceContext):
                     row['Sound'] = ''
                 print('  AUDIO ' + (row['Sound'][7:-1] if row['Sound'] else
                       'unavailable' if config.section('audio')['enabled'] else 'disabled'), flush=True)
+                report.audio(row['Sound'])
                 for error in context.errors[previous:]:
                     print(f'  WARN  {error["source"]}: {concise(error["message"])}', flush=True)
                 row['FrontField'] = f'<span dir="{direction(config.section("language")["source"])}">' + html.escape(word) + '</span>' + (' ' + row['Sound'] if row['Sound'] else '')
@@ -244,6 +252,14 @@ def run(config, context_factory=SourceContext):
             paths.append(error_path)
         except Exception as exc:
             failures.append('Error report: ' + str(exc))
+    if 'report' in config.section('output')['formats']:
+        try:
+            from app.run_report import write_report
+            paths.extend(write_report(config, report, rows, input_skips, context.errors, paths, failures,
+                                      interrupted or fatal, stem + ('_partial' if interrupted or fatal else ''), active))
+        except Exception as exc:
+            failures.append('Run report: ' + str(exc))
+            print(f'  FAIL export report: {concise(exc)}', flush=True)
     report.finish(rows, context.errors, paths, failures, partial=interrupted or fatal)
     return 2 if interrupted else (1 if failures or fatal else 0)
 

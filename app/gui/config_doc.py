@@ -52,7 +52,7 @@ CHOICES = {
     'audio.priority': ('ordered', AUDIO_PROVIDERS),
     'audio.word.*': ('ordered', AUDIO_PROVIDERS),
     'audio.english_accent': ('select', ['us', 'uk']),
-    'output.formats': ('ordered', ['xlsx', 'csv', 'apkg', 'html', 'json']),
+    'output.formats': ('ordered', ['xlsx', 'csv', 'apkg', 'html', 'json', 'report']),
 }
 FILE_FIELDS = {'input.file': ('.xlsx', '.xlsm', '.xls'), 'style.file': ('.css',)}
 LONG_TEXT = {'info.text'}

@@ -143,6 +143,17 @@ class CacheBrowserTests(unittest.TestCase):
         self.assertEqual(self.cache.search(status='found')['total'], 3)
         self.assertEqual(len(self.cache.search(limit=2)['rows']), 2)
 
+    def test_indirect_results_are_their_own_status(self):
+        self.cache.put('k-gikk', 'lexin', 'gikk', '<div class="lexin-form-note">gikk → <b>gå</b></div><ul>go</ul>',
+                       '', [], [])
+        stats = self.cache.stats()
+        self.assertEqual((stats['indirect'], stats['not_found']), (1, 1))
+        rows = self.cache.search(status='indirect')['rows']
+        self.assertEqual([(r['word'], r['indirect']) for r in rows], [('gikk', ['gå'])])
+        self.assertNotIn('gikk', [r['word'] for r in self.cache.search(status='found')['rows']])
+        self.assertEqual(self.cache.search('hus', source='lexin')['rows'][0]['indirect'], [])
+        self.assertEqual(self.cache.delete_matching(status='indirect'), 1)
+
     def test_delete_matching_uses_the_same_filters_as_search(self):
         self.assertEqual(self.cache.delete_matching('hus', source='oxford'), 1)
         self.assertEqual(self.cache.delete_matching(status='not_found'), 1)

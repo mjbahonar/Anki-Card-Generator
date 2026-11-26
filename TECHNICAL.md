@@ -90,6 +90,10 @@ For example, `formats = ["apkg", "html"]` creates just an Anki package and a pre
 
 Only the input headword's pronunciation is downloaded. `[audio.word]` chooses providers per `language.source` (`lexin`, `fastdic`, `google_tts`; the first success wins, `[]` disables headword audio); `nb`/`nn` use the `no` list and unlisted languages use `audio.priority`. `cards.normal.audio = false` turns headword audio off for every language. Provider priority is independent of the visible dictionary list. Norwegian defaults to Lexin with Google TTS fallback; English defaults to Fastdic with a selected US/UK accent and Google TTS fallback. Cached audio is reused. Anki packages include only referenced media and the font, rather than the entire media directory. Lexin/Google audio is synthesized speech.
 
+### Run report (PDF and PNG)
+
+Add `"report"` to `output.formats` to get `<output>_report.pdf` and `<output>_report.png` after each run. The PDF has a summary page (status, workbook and row range, languages, deck, dictionaries, duration; words processed, found, indirect, not found, failed, with audio, from cache, skipped rows; a bar per dictionary), the full word list with each dictionary's result (✓ direct, ↪ indirect with its base word, ✕ not in the dictionary, ! failed, ⟲ from cache, ♪ audio), issues, and every setting of the run. The PNG is the summary page, for sharing. It is rendered with the Playwright Chromium already used for Lexin; a report failure is listed as an export failure and does not affect the other files.
+
 ### Anki identity
 
 After the first import, keep the deck/model IDs fixed. Disabling or reordering sources does not change the schema. Note GUIDs depend on the model, deck, language and normalized word, so changing definitions or audio does not create a new note. Use a new deck ID when you want an independent deck.
@@ -226,7 +230,7 @@ To check a word again: `python main.py --refresh-word WORD [--source SOURCE]` de
 
 ### Database page in the GUI
 
-The **Database** page of `python main.py --gui` shows the cache file size, number of words and results, "not found" results, stored audio/media and text per dictionary. Search words (with dictionary and found/not-found filters), open a result to see its saved card content, settings and media, **Fetch again** (runs `--refresh-word` for that dictionary) or **Delete** it. Select results with the checkboxes and **Delete selected**, or **Delete all matching** to remove everything the current search and filters match (also rows not loaded yet). Maintenance: **Compact file** (`VACUUM`), **Recheck all not found** or per dictionary, and **Clear cache** for a whole dictionary. Changes that write to the database wait while a run is in progress. Deleting a result keeps the audio and image files in your folders.
+The **Database** page of `python main.py --gui` shows the cache file size, number of words and results, indirect results (found through an inflected form, shown as `Indirect → gå`), "not found" results, stored audio/media and text per dictionary. Search words (with dictionary and found/not-found filters), open a result to see its saved card content, settings and media, **Fetch again** (runs `--refresh-word` for that dictionary) or **Delete** it. Select results with the checkboxes and **Delete selected**, or **Delete all matching** to remove everything the current search and filters match (also rows not loaded yet). Maintenance: **Compact file** (`VACUUM`), **Recheck all not found** or per dictionary, and **Clear cache** for a whole dictionary. Changes that write to the database wait while a run is in progress. Deleting a result keeps the audio and image files in your folders.
 
 ### Inflected forms in Lexin
 

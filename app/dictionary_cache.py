@@ -1,6 +1,8 @@
 """Persistent dictionary results and lossless media backups (stdlib SQLite)."""
 import hashlib
+import html
 import json
+import re
 from pathlib import Path
 import sqlite3
 
@@ -30,6 +32,17 @@ def cache_key(name, word, config, audio=False):
             settings['bing_query'] = 'clipart'  # Bing searches "<word> clipart"; earlier plain-word results are not reused.
     # The adapter revision protects against reusing output from a changed parser.
     return json.dumps([1, name, normalize_headword(word), settings], sort_keys=True, ensure_ascii=False)
+
+
+# A result found through an inflected form ("gikk → gå") carries this note in its content: an
+# indirect translation. Statuses: found (direct), indirect, not_found.
+INDIRECT_MARK = '%lexin-form-note%'
+FORM_NOTE = re.compile(r'lexin-form-note">.*?→ <b>(.*?)</b>', re.S)
+
+
+def indirect_bases(content):
+    """Base words of an indirect result, e.g. ['gå'] for gikk; [] for a direct result."""
+    return list(dict.fromkeys(html.unescape(m) for m in FORM_NOTE.findall(content or '')))
 
 
 class DictionaryCache:
@@ -65,20 +78,22 @@ class DictionaryCache:
     def stats(self):
         """Overview: file size, results per source (found / not found) and stored media."""
         info = {'path': str(self.path), 'exists': self.path.is_file(), 'file_bytes': 0, 'sources': [],
-                'media': [], 'results': 0, 'not_found': 0, 'words': 0, 'media_bytes': 0, 'text_bytes': 0,
+                'media': [], 'results': 0, 'not_found': 0, 'indirect': 0, 'words': 0, 'media_bytes': 0, 'text_bytes': 0,
                 'oldest': None, 'newest': None}
         if not info['exists']:
             return info
         info['file_bytes'] = self.path.stat().st_size
         db = self.connect()
         try:
-            for source, total, missing, text, oldest, newest in db.execute(
-                    "SELECT source, COUNT(*), SUM(content=''), SUM(LENGTH(content)+LENGTH(documents)), "
-                    "MIN(saved_at), MAX(saved_at) FROM results GROUP BY source ORDER BY COUNT(*) DESC"):
+            for source, total, missing, indirect, text, oldest, newest in db.execute(
+                    "SELECT source, COUNT(*), SUM(content=''), SUM(content LIKE ?), SUM(LENGTH(content)+LENGTH(documents)), "
+                    "MIN(saved_at), MAX(saved_at) FROM results GROUP BY source ORDER BY COUNT(*) DESC", (INDIRECT_MARK,)):
                 info['sources'].append({'source': source, 'results': total, 'not_found': missing or 0,
-                                        'text_bytes': text or 0, 'oldest': oldest, 'newest': newest})
+                                        'indirect': indirect or 0, 'text_bytes': text or 0,
+                                        'oldest': oldest, 'newest': newest})
             info['results'] = sum(s['results'] for s in info['sources'])
             info['not_found'] = sum(s['not_found'] for s in info['sources'])
+            info['indirect'] = sum(s['indirect'] for s in info['sources'])
             info['text_bytes'] = sum(s['text_bytes'] for s in info['sources'])
             info['words'] = len({normalize_headword(w) for (w,) in db.execute('SELECT word FROM results')})
             dates = [s for s in info['sources'] if s['oldest']]
@@ -104,14 +119,18 @@ class DictionaryCache:
         if source:
             where.append('r.source = ?')
             args.append(source)
-        if status == 'found':
-            where.append("r.content != ''")
+        if status == 'found':  # Direct: the word itself is a headword.
+            where.append("r.content != '' AND r.content NOT LIKE ?")
+            args.append(INDIRECT_MARK)
+        elif status == 'indirect':  # Through an inflected form (gikk → gå).
+            where.append('r.content LIKE ?')
+            args.append(INDIRECT_MARK)
         elif status == 'not_found':
             where.append("r.content = ''")
         return (' WHERE ' + ' AND '.join(where)) if where else '', args
 
     def search(self, query='', source=None, status=None, limit=100, offset=0):
-        """Cached results whose word contains query; status is None, 'found' or 'not_found'."""
+        """Cached results whose word contains query; status is None, 'found', 'indirect' or 'not_found'."""
         if not self.path.is_file():
             return {'total': 0, 'rows': []}
         clause, args = self._filter(query, source, status)
@@ -120,6 +139,7 @@ class DictionaryCache:
             total = db.execute('SELECT COUNT(*) FROM results r' + clause, args).fetchone()[0]
             rows = db.execute(
                 'SELECT r.key, r.word, r.source, r.content = \'\', r.saved_at, LENGTH(r.content) + LENGTH(r.documents), '
+                'CASE WHEN r.content LIKE \'%lexin-form-note%\' THEN r.content ELSE \'\' END, '
                 '(SELECT COUNT(*) FROM result_media m WHERE m.key = r.key), '
                 '(SELECT COALESCE(SUM(LENGTH(a.data)), 0) FROM result_media m JOIN assets a USING(digest) WHERE m.key = r.key) '
                 'FROM results r' + clause + ' ORDER BY r.word COLLATE NOCASE, r.source LIMIT ? OFFSET ?', args + [int(limit), int(offset)]).fetchall()
@@ -127,8 +147,8 @@ class DictionaryCache:
             db.close()
         return {'total': total, 'rows': [
             {'key': key, 'word': word, 'source': src, 'not_found': bool(missing), 'saved_at': saved,
-             'text_bytes': text or 0, 'media_files': files, 'media_bytes': size}
-            for key, word, src, missing, saved, text, files, size in rows]}
+             'indirect': indirect_bases(note), 'text_bytes': text or 0, 'media_files': files, 'media_bytes': size}
+            for key, word, src, missing, saved, text, note, files, size in rows]}
 
     def entry(self, key):
         """One cached result: its card HTML and the media file names it restores."""

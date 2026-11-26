@@ -1,5 +1,15 @@
 # Release notes
 
+## v5.9.0 — 2026-11-26
+
+- Added a run report: `"report"` in `output.formats` writes `<output>_report.pdf` (summary, every word with each dictionary's result, issues and every setting) and `<output>_report.png` (the summary page).
+- Results found through an inflected form are treated as indirect translations: the Database page has an **Indirect** filter, an `Indirect → gå` badge and separate counts; reports show them as ↪ with the base word.
+- Fixed a needless "No headword pronunciation available" warning for every inflected form (Lexin's recording says the base word, so the next audio provider is used on purpose).
+- The `gikk → gå` note on cards is now a centered box with an "Inflected form" label, in light and dark mode (CSS only; cached results need no refresh — rebuild and import the deck).
+- The distributed `config.toml` now includes `"report"` in `output.formats`.
+- Compatibility: backward-compatible minor release. `"report"` is optional and older configs remain valid; the database structure, Anki fields, model IDs, note GUIDs and `app.api` are unchanged. The card style gains `.lexin-form-note` rules only.
+- Validation: full automated test suite on a clean copy of this commit (including an end-to-end PDF/PNG render), `python main.py --check` on a local workbook, `git diff --check` and the flash-cards tests. A real run of 15 inflected test words on a copy of a real cache: all found indirectly with the expected base words, status COMPLETED with no issues, report PDF (6 pages) and PNG checked visually. The note box was checked in light and dark mode in Chromium; not yet viewed in AnkiDroid.
+
 ## v5.8.0 — 2026-11-26
 
 - Lexin finds inflected forms: without an exact headword, the first `sources.lexin.form_entries` results (default 3; `0` = off) are checked for the input in their inflection tables (*gikk → gå*, *husene → hus*, *bøker → bøk, bok*, *større → stor*). Matching entries get a short `gikk → gå` note; the headword recording is skipped for them, so pronunciation comes from the next audio provider. Exact headwords still win.

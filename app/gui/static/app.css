@@ -258,6 +258,7 @@ dialog::backdrop { background: rgba(10, 12, 25, .45); backdrop-filter: blur(2px)
 .danger-text { color: var(--bad) !important; }
 .badge.ok { color: var(--ok); background: var(--ok-soft); }
 .badge.warn { color: var(--warn); background: var(--warn-soft); }
+.badge.info { color: #0284c7; background: color-mix(in srgb, #0ea5e9 14%, transparent); }
 .db-details { grid-column: 1 / -1; display: grid; gap: 8px; padding: 6px 0 4px; }
 .db-preview { width: 100%; height: 260px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .db-media { display: flex; flex-wrap: wrap; gap: 6px; }

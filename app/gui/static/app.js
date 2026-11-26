@@ -463,10 +463,10 @@ async function loadStats(card) {
     el('strong', { text: value }), sub ? el('span', { class: 'tile-sub', text: sub }) : null);
   const audio = stats.media.find((m) => m.kind === 'audio') || { files: 0, bytes: 0 };
   const table = el('table', { class: 'db-table' },
-    el('thead', {}, el('tr', {}, [t('db.source'), t('db.results'), t('db.not_found'), t('db.text'), t('db.last_saved'), ''].map((h) => el('th', { text: h })))),
+    el('thead', {}, el('tr', {}, [t('db.source'), t('db.results'), t('db.indirect'), t('db.not_found'), t('db.text'), t('db.last_saved'), ''].map((h) => el('th', { text: h })))),
     el('tbody', {}, stats.sources.map((s) => el('tr', {},
       el('td', { text: sourceName(s.source) }), el('td', { text: String(s.results) }),
-      el('td', { text: String(s.not_found) }), el('td', { text: formatBytes(s.text_bytes) }),
+      el('td', { text: String(s.indirect || 0) }), el('td', { text: String(s.not_found) }), el('td', { text: formatBytes(s.text_bytes) }),
       el('td', { text: s.newest || '' }),
       el('td', {}, s.not_found ? el('button', { class: 'btn ghost small', text: t('db.forget_not_found'),
         disabled: state.job.running,
@@ -486,6 +486,7 @@ async function loadStats(card) {
       el('div', { class: 'tiles' },
         tile(t('db.file'), formatBytes(stats.file_bytes)),
         tile(t('db.words'), String(stats.words), t('db.results_n', { count: stats.results })),
+        tile(t('db.indirect'), String(stats.indirect || 0), t('db.indirect_sub')),
         tile(t('db.not_found'), String(stats.not_found), t('db.not_found_sub')),
         tile(t('db.audio'), String(audio.files), formatBytes(audio.bytes)),
         tile(t('db.media'), formatBytes(stats.media_bytes), stats.media.map((m) => `${m.kind}: ${m.files}`).join(' · ')),
@@ -503,7 +504,7 @@ async function renderSearch(card, reset) {
   const input = el('input', { type: 'search', id: 'db-q', value: db.q, placeholder: t('db.search_placeholder'), 'aria-label': t('db.search') });
   const source = el('select', { id: 'db-source', 'aria-label': t('db.source') }, el('option', { value: '', text: t('db.all_sources') }),
     (db.sources || []).map((s) => el('option', { value: s, text: sourceName(s), selected: s === db.source })));
-  const status = el('select', { 'aria-label': t('db.status') }, [['', t('db.all')], ['found', t('db.found')], ['not_found', t('db.not_found')]]
+  const status = el('select', { 'aria-label': t('db.status') }, [['', t('db.all')], ['found', t('db.found')], ['indirect', t('db.indirect')], ['not_found', t('db.not_found')]]
     .map(([v, label]) => el('option', { value: v, text: label, selected: v === db.status })));
   const list = el('div', { class: 'db-rows' });
   const count = el('span', { class: 'hint' });
@@ -530,7 +531,7 @@ async function renderSearch(card, reset) {
     t('db.delete_selected_confirm', { count: db.selected.size })).then((r) => { if (r) db.selected.clear(); }));
   deleteMatching.addEventListener('click', () => {
     const filters = [db.q && `"${db.q}"`, db.source && sourceName(db.source),
-      db.status && (db.status === 'not_found' ? t('db.not_found') : t('db.found'))].filter(Boolean).join(' · ') || t('db.all');
+      db.status && t({ not_found: 'db.not_found', indirect: 'db.indirect', found: 'db.found' }[db.status])].filter(Boolean).join(' · ') || t('db.all');
     dbAction('/api/db/delete_matching', { q: db.q, source: db.source, status: db.status },
       t('db.delete_matching_confirm', { count: db.total, filters }));
   });
@@ -573,7 +574,9 @@ function renderDbRow(row) {
       line.replaceWith(renderDbRow(row));
     } }),
     el('span', { class: 'db-source', text: sourceName(row.source) }),
-    el('span', { class: 'badge ' + (row.not_found ? 'warn' : 'ok'), text: row.not_found ? t('db.not_found') : t('db.found') }),
+    el('span', { class: 'badge ' + (row.not_found ? 'warn' : row.indirect.length ? 'info' : 'ok'),
+      title: row.indirect.length ? t('db.indirect_help') : '',
+      text: row.not_found ? t('db.not_found') : row.indirect.length ? t('db.indirect_of', { base: row.indirect.join(', ') }) : t('db.found') }),
     el('span', { class: 'db-meta', text: [formatBytes(row.text_bytes), row.media_files ? `${row.media_files} ${t('db.files')} · ${formatBytes(row.media_bytes)}` : '', (row.saved_at || '').slice(0, 16)].filter(Boolean).join(' · ') }),
     el('span', { class: 'db-actions' },
       el('button', { class: 'btn ghost small', text: t('db.fetch_again'), disabled: state.job.running, title: t('db.fetch_again_help'),

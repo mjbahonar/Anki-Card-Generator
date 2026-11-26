@@ -691,6 +691,8 @@ def select_audio(word, number, ctx):
                     ctx.lexin(word, number, audio=True)
                 sound = ctx.lexin_results.get(word, ('', ''))[1]
                 if not sound:
+                    if 'lexin-form-note' in ctx.lexin_results.get(word, ('', ''))[0]:
+                        continue  # Inflected form: Lexin's recording says the base word; the next provider says the form.
                     raise ValueError('No headword pronunciation available')
                 return sound
             if provider == 'fastdic':

@@ -2,7 +2,7 @@
 
 Turn your Excel list into a ready-to-import Anki deck, with dictionary meanings, examples and pronunciation. Start with words alone, or add typing, speaking, listening and gap exercises in the same workbook.
 
-[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.8.0**
+[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.9.0**
 
 ## How it works
 
@@ -42,6 +42,7 @@ Edit the existing sections in **`config.toml`**:
 | `sources.*.enabled` | The dictionaries you want on your cards |
 | `anki.deck_name` | Your deck name (keep several under `[anki.saved_decks]` and switch between them) |
 | `input.max_words` | `3` for a small trial; `0` for the full list |
+| `output.formats` | Add `"report"` for a PDF and PNG run report (counts, every word, all settings) |
 | `input.first_row` / `input.last_row` | Only these Excel rows, e.g. `10` to `50`; `0` = no limit. A range without words stops the run with an error |
 
 The distributed configuration enables only **Lexin Bokmål–English**. For English, set the source language to `en` and enable compatible sources such as Cambridge, Oxford or Fastdic. Changing the language does not enable dictionaries automatically.
