@@ -180,14 +180,14 @@ class SourceContext:
                               else str(exc)))
                 self.issue(self.cache_capture['word'], 'dictionary_media', message)
 
-    def cache_result(self, name, word, loader, audio=False, word_class=None, alias=None):
+    def cache_result(self, name, word, loader, audio=False, key_extra=None, alias=None):
         """word is what is looked up; alias is the text as written (e.g. "en skål") for audio bookkeeping."""
         from app.dictionary_cache import cache_key
         self.last_cache_hit = False
         self.last_not_found = False
         if self.dictionary_cache is None:
             return loader()
-        key = cache_key(name, word, self.config, audio, word_class)
+        key = cache_key(name, word, self.config, audio, key_extra)
         written = alias or word
         try:
             cached = (None if self.config.data.get('dictionary_cache', {}).get('refresh', False)
@@ -442,26 +442,29 @@ class SourceContext:
         return cached_exercise_audio(form, language, self)
 
     def lexin(self, word, number, audio=False):
-        """Lexin result for the text as written; "å", "en/ei/et" and a final "!" only guide the lookup."""
+        """Lexin result for the text as written. "å", "en/ei/et" and a final "!" are removed before the
+        lookup and never filter meanings, so "å lese" shares the cached result of "lese"."""
         from app.lexin_scraper import split_lookup
-        lookup, word_class = split_lookup(word, self.language)
-        return self.cache_result('lexin', lookup, lambda: self._lexin(lookup, number, audio, word_class, word),
-                                 audio, word_class=word_class, alias=word)
+        lookup, marker = split_lookup(word, self.language)
+        a_infinitive = marker == 'verb' and len(lookup) > 2 and lookup.endswith('a')
+        return self.cache_result('lexin', lookup, lambda: self._lexin(lookup, number, audio, a_infinitive, word),
+                                 audio, key_extra='a_infinitive' if a_infinitive else None, alias=word)
 
-    def _lexin(self, word, number, audio=False, word_class=None, written=None):
+    def _lexin(self, word, number, audio=False, a_infinitive=False, written=None):
         written = written or word
         if audio:
             self.lexin_audio_attempted.add(written)
         cached = self.cached_audio(word, 'lexin') if audio else ''
-        content, sound, definite = self._lexin_scrape(word, number, audio, cached, word_class, written)
-        if not content and definite and word_class == 'verb' and len(word) > 2 and word.endswith('a'):
-            # "å kjøpa": an a-infinitive. Lexin's bokmål has the e-infinitive, so try "kjøpe" as a verb.
+        content, sound, definite = self._lexin_scrape(word, number, audio, cached, written)
+        if a_infinitive:
+            # "å kjøpa": an a-infinitive. Lexin's bokmål lists the verb as "kjøpe" (while "kjøpa" is also a
+            # noun form), so the e-infinitive is added after whatever "kjøpa" itself found.
             e_form = word[:-1] + 'e'
-            content, sound, definite = self._lexin_scrape(e_form, number, audio, cached, word_class, written)
-            if content:
+            verb, _, verb_absent = self._lexin_scrape(e_form, number, False, cached, written)
+            if verb:
                 from app.lexin_scraper import form_note
-                content = form_note(word, e_form) + content
-                sound = ''  # The recording says the e-infinitive, not what was written.
+                content += form_note(word, e_form) + verb
+            definite = definite and verb_absent
         if sound:
             sound = self.register_audio(self.audio_dir / sound[7:-1])
         self.lexin_results[written] = (content, cached or sound)
@@ -470,7 +473,7 @@ class SourceContext:
             self.absent_details = {'form_entries': lexin_form_entries(self.config)}
         return content
 
-    def _lexin_scrape(self, word, number, audio, cached, word_class, written):
+    def _lexin_scrape(self, word, number, audio, cached, written):
         """One Lexin search per selected variant; returns (content, sound tag, every variant said "not there")."""
         variant = self.config.section('sources').get('lexin', {}).get(
             'variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
@@ -493,7 +496,7 @@ class SourceContext:
                     table_cached_fallback=self.cached_table_audio_fallback,
                     on_entry=lambda markup: self.capture_entry(markup, page.url),
                     max_entries=self.config.section('sources').get('lexin', {}).get('entries', 2),
-                    form_entries=lexin_form_entries(self.config), word_class=word_class,
+                    form_entries=lexin_form_entries(self.config),
                     on_not_found=lambda selected=selected: absent.append(selected))
             contents.append(content)
             sound = selected_sound or sound

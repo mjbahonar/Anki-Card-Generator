@@ -94,6 +94,21 @@ code { font-family: "Cascadia Code", Consolas, ui-monospace, monospace; font-siz
 .config-path { display: grid; gap: 2px; }
 .config-path code { overflow-wrap: anywhere; color: var(--text); opacity: .75; }
 .language-picker { display: grid; gap: 4px; }
+.lang-select { position: relative; }
+.lang-current { width: 100%; display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; font-weight: 560; }
+.lang-current:hover, .lang-current[aria-expanded="true"] { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.lang-current .lang-name { flex: 1; text-align: start; }
+.lang-caret { color: var(--muted); font-size: 11px; }
+.lang-menu { position: absolute; inset-inline: 0; bottom: calc(100% + 6px); margin: 0; padding: 5px; list-style: none;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(10, 12, 25, .18); z-index: 20; }
+.lang-menu li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  color: var(--text); font-weight: 540; outline: none; }
+.lang-menu li:hover, .lang-menu li:focus { background: var(--panel-2); }
+.lang-menu li[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.lang-menu li[aria-selected="true"]::after { content: "✓"; margin-inline-start: auto; font-weight: 700; }
+.lang-menu li .lang-name { font-family: "Vazirmatn", "Segoe UI", system-ui, sans-serif; }
+.flag { width: 24px; height: 16px; flex: none; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .12); }
 
 /* Content */
 .content { padding: 30px clamp(18px, 4vw, 48px) 40px; max-width: 1060px; width: 100%; }

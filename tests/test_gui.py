@@ -254,6 +254,13 @@ class StringsTests(unittest.TestCase):
         self.assertEqual(unlabeled, [])
         self.assertEqual(i18n.strings('fa')['action.run'], 'اجرا')
 
+    def test_every_language_has_a_flag_the_page_can_draw(self):
+        script = (ROOT / 'app' / 'gui' / 'static' / 'app.js').read_text(encoding='utf-8')
+        flags = {language['code']: language['flag'] for language in i18n.languages()}
+        self.assertEqual(flags, {'en': 'us', 'fa': 'ir-lion-sun'})
+        for flag in flags.values():
+            self.assertTrue(f"  {flag}:" in script or f"  '{flag}':" in script, flag)
+
     def test_other_languages_fall_back_to_english(self):
         self.assertEqual(i18n.strings('xx')['action.run'], 'Run')
         self.assertEqual(i18n.languages()[0]['code'], i18n.DEFAULT_LANGUAGE)

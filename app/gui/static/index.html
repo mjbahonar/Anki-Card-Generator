@@ -20,10 +20,14 @@
       </div>
       <nav id="tabs" class="tabs" role="tablist"></nav>
       <div class="sidebar-foot">
-        <label id="language-picker" class="language-picker" hidden>
-          <span data-t="language.label"></span>
-          <select id="language"></select>
-        </label>
+        <div id="language-picker" class="language-picker" hidden>
+          <span id="language-label" data-t="language.label"></span>
+          <div class="lang-select">
+            <button id="language-button" type="button" class="lang-current" aria-haspopup="listbox"
+                    aria-expanded="false" aria-labelledby="language-label language-button"></button>
+            <ul id="language-menu" class="lang-menu" role="listbox" hidden></ul>
+          </div>
+        </div>
         <div class="config-path"><span data-t="app.config_file"></span><code id="config-path"></code></div>
       </div>
     </aside>

@@ -21,6 +21,46 @@ const ICONS = {
   database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   other: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
 };
+// Flags for the interface language picker, drawn inline (flag emoji do not render on Windows).
+function usFlag() {
+  const stripe = 20 / 13;
+  let svg = '<rect width="30" height="20" fill="#b22234"/>';
+  for (let i = 1; i < 13; i += 2) svg += `<rect y="${(i * stripe).toFixed(3)}" width="30" height="${stripe.toFixed(3)}" fill="#fff"/>`;
+  svg += `<rect width="12" height="${(7 * stripe).toFixed(3)}" fill="#3c3b6e"/>`;
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 6 - (row % 2); col += 1) {
+      svg += `<circle cx="${(1.1 + col * 2 + (row % 2)).toFixed(2)}" cy="${(1.1 + row * 2.05).toFixed(2)}" r="0.42" fill="#fff"/>`;
+    }
+  }
+  return svg;
+}
+const FLAGS = {
+  us: usFlag(),
+  // Iran's lion-and-sun flag, simplified for a small icon: tricolour, the sun rising behind a lion that
+  // faces left with a raised sword.
+  'ir-lion-sun': '<rect width="30" height="20" fill="#fff"/><rect width="30" height="6.67" fill="#239f40"/>'
+    + '<rect y="13.33" width="30" height="6.67" fill="#da0000"/>'
+    + '<g stroke="#f2a900" stroke-width="0.5" stroke-linecap="round">'
+    + [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((a) => {
+      const r = Math.PI * a / 180;
+      return `<line x1="${(16.9 + 1.6 * Math.cos(r)).toFixed(2)}" y1="${(8.2 + 1.6 * Math.sin(r)).toFixed(2)}" x2="${(16.9 + 2.5 * Math.cos(r)).toFixed(2)}" y2="${(8.2 + 2.5 * Math.sin(r)).toFixed(2)}"/>`;
+    }).join('') + '</g>'
+    + '<circle cx="16.9" cy="8.2" r="1.6" fill="#f7b500"/>'
+    + '<g fill="#c8901c">'
+    + '<rect x="12.6" y="9.45" width="5.2" height="1.75" rx="0.85"/>'
+    + '<rect x="12.85" y="10.6" width="0.5" height="2.05" rx="0.2"/><rect x="13.7" y="10.6" width="0.5" height="2.05" rx="0.2"/>'
+    + '<rect x="16.35" y="10.6" width="0.5" height="2.05" rx="0.2"/><rect x="17.15" y="10.6" width="0.5" height="2.05" rx="0.2"/>'
+    + '</g>'
+    + '<path d="M17.7 10c.7-.2 1-.8 1-1.6" fill="none" stroke="#c8901c" stroke-width="0.4" stroke-linecap="round"/>'
+    + '<circle cx="18.7" cy="8.3" r="0.4" fill="#9a6410"/>'
+    + '<circle cx="12.75" cy="9.35" r="1.35" fill="#9a6410"/>'
+    + '<circle cx="12.25" cy="9.45" r="0.75" fill="#d9a43a"/>'
+    + '<circle cx="11.95" cy="9.3" r="0.12" fill="#3a2a10"/>'
+    + '<line x1="13.25" y1="9.7" x2="11.6" y2="6.35" stroke="#9aa0a6" stroke-width="0.38" stroke-linecap="round"/>'
+    + '<line x1="12.45" y1="8.35" x2="13.35" y2="7.95" stroke="#9aa0a6" stroke-width="0.32" stroke-linecap="round"/>',
+};
+const flagIcon = (code) => (FLAGS[code] ? `<svg class="flag" viewBox="0 0 30 20" aria-hidden="true">${FLAGS[code]}</svg>` : '');
+
 const CHEVRON_UP = '<svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>';
 const CHEVRON_DOWN = '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>';
 
@@ -117,8 +157,7 @@ async function load(keepBanner = false) {
   $('#version').textContent = 'v' + info.app_version;
   $('#config-path').textContent = info.config_path;
 
-  const picker = $('#language');
-  picker.replaceChildren(...info.languages.map((l) => el('option', { value: l.code, text: l.name, selected: l.code === state.lang })));
+  renderLanguagePicker(info.languages);
   $('#language-picker').hidden = info.languages.length < 2;
 
   state.schema = info.schema;
@@ -141,6 +180,37 @@ async function load(keepBanner = false) {
   if (!keepBanner) banner('', '');
   render();
   if (info.job && info.job.running && !state.poller) { state.logNext = 0; $('#log').textContent = ''; poll(); }
+}
+
+function renderLanguagePicker(languages) {
+  const current = languages.find((l) => l.code === state.lang) || languages[0];
+  $('#language-button').innerHTML = flagIcon(current.flag) + '<span class="lang-name"></span><span class="lang-caret">▾</span>';
+  $('#language-button .lang-name').textContent = current.name;
+  $('#language-menu').replaceChildren(...languages.map((l) => {
+    const item = el('li', {
+      role: 'option', tabindex: '-1', 'aria-selected': String(l.code === state.lang), 'data-code': l.code,
+      onclick: () => chooseLanguage(l.code),
+      onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chooseLanguage(l.code); } },
+    }, el('span', { html: flagIcon(l.flag), style: 'display:contents' }), el('span', { class: 'lang-name', text: l.name, dir: l.dir }));
+    return item;
+  }));
+}
+
+function toggleLanguageMenu(open) {
+  const menu = $('#language-menu');
+  const show = open ?? menu.hidden;
+  menu.hidden = !show;
+  $('#language-button').setAttribute('aria-expanded', String(show));
+  if (show) (menu.querySelector('[aria-selected="true"]') || menu.firstElementChild)?.focus();
+}
+
+async function chooseLanguage(code) {
+  toggleLanguageMenu(false);
+  if (code === state.lang) return;
+  if (dirtyCount() && !(await confirmBox(t('confirm.reload')))) return;
+  state.lang = code;
+  localStorage.setItem('gui.lang', state.lang);
+  await load();
 }
 
 // ---------------------------------------------------------------- rendering
@@ -792,11 +862,16 @@ async function boot() {
   $('#close-log').addEventListener('click', () => showLog(false));
   $('#clear-log').addEventListener('click', () => { $('#log').textContent = ''; });
   $('#open-output').addEventListener('click', () => api('POST', '/api/open', { what: 'output' }).catch((e) => banner('error', e.error)));
-  $('#language').addEventListener('change', async (e) => {
-    if (dirtyCount() && !(await confirmBox(t('confirm.reload')))) { e.target.value = state.lang; return; }
-    state.lang = e.target.value;
-    localStorage.setItem('gui.lang', state.lang);
-    await load();
+  $('#language-button').addEventListener('click', () => toggleLanguageMenu());
+  document.addEventListener('click', (e) => { if (!e.target.closest('.lang-select')) toggleLanguageMenu(false); });
+  $('#language-menu').addEventListener('keydown', (e) => {
+    const items = [...$('#language-menu').children];
+    const index = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { toggleLanguageMenu(false); $('#language-button').focus(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(index + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+    }
   });
   window.addEventListener('beforeunload', (e) => { if (dirtyCount()) e.preventDefault(); });
   document.addEventListener('keydown', (e) => {

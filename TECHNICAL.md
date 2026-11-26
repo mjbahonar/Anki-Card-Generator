@@ -234,9 +234,9 @@ The **Database** page of `python main.py --gui` shows the cache file size, numbe
 
 ### Words written with å, en, ei, et or "!"
 
-For Norwegian input, a leading `å` (verb) or `en` / `ei` / `et` (noun, with that gender) and a final `!` are removed before any dictionary lookup; Lexin would otherwise search the whole phrase and return unrelated words. The marker then selects Lexin entries: `å` keeps verbs only; `en`/`ei`/`et` keep nouns, preferring that gender (`en skål` gives the bowl, not the toast *skål!*). After `å`, an a-infinitive that is not a verb in Lexin's bokmål is tried with -e (`å kjøpa` → *kjøpe*, shown as an indirect result) instead of matching a noun form (*kjøpa*, the purchases).
+For Norwegian input, a leading `å`, `en`, `ei` or `et` and a final `!` are removed before any dictionary lookup; Lexin would otherwise search the whole phrase and return unrelated words. They never filter meanings: `en skål` shows both *skål* entries (the bowl and the toast), so a card never hides that a word is also a noun or a verb. `å lese` and `lese` therefore share one cached result. One exception: after `å`, an a-infinitive also gets the verb's e-infinitive (`å kjøpa` shows the noun form *kjøpa* of *kjøp* and the verb *kjøpe*, with a `kjøpa → kjøpe` note), cached separately.
 
-`[cards.normal] show_markers` (default `true`) shows the text as written on the card front; `false` shows only the word (`skål`, `kjøpe`). The note identity always uses the text as written, so toggling it updates the same notes. Audio follows the front: Lexin's recording of the word when Lexin has it, otherwise text-to-speech of what the card shows. A marker word with another meaning (`en gang`, "once") is read as a noun; write such expressions without the marker logic in mind, or check them in the Database page.
+`[cards.normal] show_markers` (default `true`) shows the text as written on the card front; `false` shows only the word (`skål`, `kjøpe`). The note identity always uses the text as written, so toggling it updates the same notes. Audio follows the front: Lexin's recording of the word when Lexin has it, otherwise text-to-speech of what the card shows.
 
 ### Inflected forms in Lexin
 

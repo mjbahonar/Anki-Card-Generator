@@ -13,7 +13,7 @@ DEFAULT_LANGUAGE = 'en'
 
 STRINGS = {
     'en': {
-        '_meta': {'name': 'English', 'dir': 'ltr'},
+        '_meta': {'name': 'English', 'dir': 'ltr', 'flag': 'us'},
         'app.title': 'Anki Card Generator',
         'app.subtitle': 'Settings',
         'app.config_file': 'Settings file',
@@ -265,5 +265,5 @@ def strings(language=None):
 
 
 def languages():
-    return [{'code': code, 'name': data['_meta']['name'], 'dir': data['_meta']['dir']}
-            for code, data in STRINGS.items()]
+    return [{'code': code, 'name': data['_meta']['name'], 'dir': data['_meta']['dir'],
+             'flag': data['_meta'].get('flag', '')} for code, data in STRINGS.items()]

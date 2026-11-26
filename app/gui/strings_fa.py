@@ -6,7 +6,7 @@ fall back to English.
 """
 
 FA = {
-    '_meta': {'name': 'فارسی', 'dir': 'rtl'},
+    '_meta': {'name': 'فارسی', 'dir': 'rtl', 'flag': 'ir-lion-sun'},
     'app.title': 'سازندهٔ کارت Anki',
     'app.subtitle': 'تنظیمات',
     'app.config_file': 'فایل تنظیمات',

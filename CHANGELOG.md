@@ -1,5 +1,12 @@
 # Release notes
 
+## v5.11.1 — 2026-11-26
+
+- `å`, `en`, `ei`, `et` and a final `!` no longer filter Lexin meanings: they are only removed before the lookup, so a card shows every meaning (`en skål`: the bowl and the toast) and never suggests a word is only a noun or only a verb. `å lese` now reuses the cached result of `lese`. After `å`, an a-infinitive shows its own results and the e-infinitive verb (`å kjøpa`: *kjøp* and *kjøpe*). Results saved by 5.10.0–5.11.0 for marked words (filtered by word class) are not reused; those words are looked up once more.
+- The interface language picker shows a flag beside each language: the United States for English and Iran's lion-and-sun flag for فارسی. Flags are drawn inline (flag emoji do not display on Windows); the picker works with the keyboard (arrows, Enter, Escape).
+- Compatibility: patch release. No configuration, CLI, database structure, Anki or `app.api` changes.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check`, `git diff --check` and the flash-cards tests. Live on a copy of a real cache: å lese, ei jul, et hus, ei bok, en bok and å gikk came from the cached results of the bare words; en skål showed both the bowl and the toast; å kjøpa showed *kjøp* and *kjøpe*. The flag picker was checked in the browser in English and Persian.
+
 ## v5.11.0 — 2026-11-26
 
 - Settings GUI in Persian: every page, button, message, setting label and help text, right-to-left, with the Vazirmatn font from `fonts/`. Choose فارسی at the bottom of the side bar; the choice is remembered. Paths, codes, IDs, sizes and dates stay left-to-right. Persian text lives in `app/gui/strings_fa.py`.

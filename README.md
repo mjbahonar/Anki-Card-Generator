@@ -2,7 +2,7 @@
 
 Turn your Excel list into a ready-to-import Anki deck, with dictionary meanings, examples and pronunciation. Start with words alone, or add typing, speaking, listening and gap exercises in the same workbook.
 
-[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.11.0**
+[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.11.1**
 
 ## How it works
 

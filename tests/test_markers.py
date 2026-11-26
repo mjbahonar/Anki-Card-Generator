@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from app.app_config import Config
 from app.dictionary_cache import cache_key
-from app.lexin_scraper import entry_class, keep_word_class, scrape_and_process_lexin, split_lookup
+from app.lexin_scraper import scrape_and_process_lexin, split_lookup
 from app.sources import SourceContext
 from tests import test_lexin_scraper
 
@@ -31,15 +31,6 @@ class MarkerTests(unittest.TestCase):
         self.assertEqual(split_lookup('en skål', 'en'), ('en skål', None))  # English "en" is not a marker.
         self.assertEqual(split_lookup('hello!', 'en'), ('hello', None))
 
-    def test_word_class_filter_prefers_gender_and_keeps_unknown(self):
-        classes = {0: 'interjection', 1: 'nounmasculineorfeminine', 2: 'verb', 3: ''}
-        self.assertEqual(keep_word_class([0, 1, 2, 3], classes, 'noun:masculine'), [1])
-        self.assertEqual(keep_word_class([0, 2, 3], classes, 'verb'), [2])
-        self.assertEqual(keep_word_class([0, 3], classes, 'verb'), [3])
-        self.assertEqual(keep_word_class([4, 5], {4: 'nounneuter', 5: 'nounmasculine'}, 'noun:feminine'), [4, 5])
-        self.assertEqual(keep_word_class([0, 1], classes, None), [0, 1])
-        self.assertEqual(entry_class(entry('skål', 'noun masculine or feminine', 'bowl')), 'nounmasculineorfeminine')
-
     def page(self, rows):
         page, entries = test_lexin_scraper.LexinTests.result_page(self, [[(w, m) for w, _, m, _ in rows]])
         for mock, (word, kat, meaning, forms) in zip(entries[0], rows):
@@ -47,23 +38,12 @@ class MarkerTests(unittest.TestCase):
             mock.locator.return_value.first.locator.return_value.first.inner_text.return_value = word
         return page
 
-    def test_marker_keeps_only_entries_of_that_class(self):
+    def test_markers_never_filter_meanings(self):
         rows = [('skål', 'interjection', 'cheers', []), ('skål', 'noun masculine or feminine', 'bowl', ['skåla'])]
-        content, _ = scrape_and_process_lexin('skål', 1, self.page(rows), download_audio=False, verbose=False,
-                                              word_class='noun:masculine')
-        self.assertIn('bowl', content)
-        self.assertNotIn('cheers', content)
-        content, _ = scrape_and_process_lexin('skål', 1, self.page(rows), download_audio=False, verbose=False)
+        word, marker = split_lookup('en skål', 'no')
+        content, _ = scrape_and_process_lexin(word, 1, self.page(rows), download_audio=False, verbose=False)
         self.assertIn('cheers', content)
         self.assertIn('bowl', content)
-
-    def test_verb_marker_rejects_a_noun_form_match(self):
-        rows = [('kjøp', 'noun neuter', 'purchase', ['et kjøp', 'kjøpet', 'kjøpa'])]
-        absent = Mock()
-        content, _ = scrape_and_process_lexin('kjøpa', 1, self.page(rows), download_audio=False, verbose=False,
-                                              form_entries=3, word_class='verb', on_not_found=absent)
-        self.assertEqual(content, '')
-        absent.assert_called_once()
 
 
 class LookupTests(unittest.TestCase):
@@ -81,28 +61,33 @@ class LookupTests(unittest.TestCase):
         self.ctx.close()
         self.temp.cleanup()
 
-    def test_cache_key_uses_the_bare_word_and_the_class(self):
+    def test_marked_and_bare_words_share_the_cache_except_a_infinitives(self):
+        from unittest.mock import Mock
+        loader = Mock(return_value='<ul>to read</ul>')
+        self.ctx.cache_result('lexin', 'lese', loader, False)
+        self.ctx.page = Mock(side_effect=AssertionError('must come from the cache'))
+        self.assertEqual(self.ctx.lexin('å lese', 1), '<ul>to read</ul>')
         config = self.ctx.config
-        self.assertNotEqual(cache_key('lexin', 'skål', config, False, 'noun:masculine'), cache_key('lexin', 'skål', config, False))
-        self.assertIn('"skål"', cache_key('lexin', 'skål', config, False, 'noun:masculine'))
+        self.assertNotEqual(cache_key('lexin', 'kjøpa', config, False, 'a_infinitive'), cache_key('lexin', 'kjøpa', config, False))
 
-    def test_a_infinitive_is_retried_as_e_infinitive_verb(self):
+    def test_a_infinitive_shows_its_own_results_and_the_e_infinitive_verb(self):
         calls = []
 
         def scrape(word, *args, **kwargs):
-            calls.append((word, kwargs.get('word_class')))
+            calls.append(word)
             if word == 'kjøpa':
-                kwargs['on_not_found']()
-                return '', ''
+                return '<div class="lexin-form-note">kjøpa → <b>kjøp</b></div><ul>purchase</ul>', ''
             return '<ul>to buy</ul>', '[sound:lexin_no_kjøpe.mp3]'
         self.ctx.page = Mock(return_value=Mock(__enter__=Mock(return_value=Mock()), __exit__=Mock(return_value=False)))
         with patch('app.sources.scrape_and_process_lexin', side_effect=scrape):
             content = self.ctx.lexin('å kjøpa!', 1)
-        self.assertEqual(calls, [('kjøpa', 'verb'), ('kjøpe', 'verb')])
-        self.assertIn('kjøpa → <b>kjøpe</b>', content)
+        self.assertEqual(calls, ['kjøpa', 'kjøpe'])
+        self.assertIn('purchase', content)  # Every meaning: the noun form ...
+        self.assertIn('kjøpa → <b>kjøpe</b>', content)  # ... and the verb.
+        self.assertLess(content.index('purchase'), content.index('to buy'))
         self.assertEqual(self.ctx.lexin_results['å kjøpa!'][1], '')  # The recording would say "kjøpe".
         rows = self.ctx.dictionary_cache.search('kjøpa')['rows']
-        self.assertEqual([(r['word'], r['indirect']) for r in rows], [('kjøpa', ['kjøpe'])])
+        self.assertEqual([(r['word'], r['indirect']) for r in rows], [('kjøpa', ['kjøp', 'kjøpe'])])
 
     def test_show_markers_and_spoken_audio(self):
         import main

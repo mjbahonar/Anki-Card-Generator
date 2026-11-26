@@ -31,33 +31,16 @@ MARKERS = {'å': 'verb', 'en': 'noun:masculine', 'ei': 'noun:feminine', 'et': 'n
 
 
 def split_lookup(text, language='no'):
-    """("en skål!", "no") -> ("skål", "noun:masculine"): the word to look up and its word class.
+    """("en skål!", "no") -> ("skål", "noun:masculine"): the word to look up and what its marker says.
 
     A trailing "!" is always dropped. Markers are read only for Norwegian (no/nb/nn) and only
-    when a word follows them; the card keeps the text exactly as written."""
+    when a word follows them. They never filter results: every meaning of the word is shown."""
     words = ' '.join(str(text).split()).rstrip('!').strip()
     if language in ('no', 'nb', 'nn'):
         first, _, rest = words.partition(' ')
         if rest.strip() and first.casefold() in MARKERS:
             return rest.strip(), MARKERS[first.casefold()]
     return words or str(text).strip(), None
-
-
-def entry_class(entry_html):
-    """Lexin word class of an entry, lowercase without spaces: 'verb', 'nounneuter', 'nounmasculineorfeminine'."""
-    node = BeautifulSoup(entry_html, 'html.parser').select_one('[data-type="KAT"]')
-    return re.sub(r'\s+', '', node.get_text(' ')).casefold() if node else ''
-
-
-def keep_word_class(indexes, classes, word_class):
-    """Entries whose class fits "verb" or "noun:<gender>"; a matching gender is preferred, not required."""
-    if not word_class:
-        return indexes
-    kind, _, gender = word_class.partition(':')
-    known = [i for i in indexes if classes[i] and classes[i].startswith(kind)]
-    fits = known or [i for i in indexes if not classes[i]]  # Entries without a class only as a last resort.
-    same_gender = [i for i in fits if gender and gender in classes[i]]
-    return same_gender or fits
 
 
 def inflected_forms(entry_html):
@@ -211,16 +194,14 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
                              verbose=True, on_error=None, remaining_timeout=None, variant='bokmal',
                              table_audio=False, on_table_media=None, audio_cache=True, table_fallback=None, on_entry=None,
-                             table_cached_fallback=None, max_entries=2, on_not_found=None, form_entries=0,
-                             word_class=None):
+                             table_cached_fallback=None, max_entries=2, on_not_found=None, form_entries=0):
     """Inspect only the first max_entries results; return exact matches and one headword sound.
 
     Without an exact headword, the first form_entries results are checked for the typed word in
     their inflection tables (an inflected form); those entries are returned with a short note.
     on_not_found() is called only when Lexin answered and the word is definitely absent:
     the page says "Ingen treff" or no inspected result matches as a headword or form.
-    Timeouts and other failures go to on_error instead.
-    word_class ("verb", "noun:neuter", ... from a written å/en/ei/et) keeps only entries of that class."""
+    Timeouts and other failures go to on_error instead."""
     def log(message):
         if verbose:
             print(message)
@@ -252,12 +233,7 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
         wanted = normalize_headword(str(word))
         # Exact headwords first; only without one, entries whose inflection table holds the typed
         # form (gikk -> gå, husene -> hus). Lexin lists the base word among the first results.
-        exact, classes = [], {}
-
-        def class_of(index):
-            if index not in classes:
-                classes[index] = entry_class(entries.nth(index).inner_html()) if word_class else ''
-            return classes[index]
+        exact = []
         for index in range(min(max_entries, entries.count())):
             lemmas = entries.nth(index).locator(lemma_selector)
             if not lemmas.count():
@@ -266,10 +242,6 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
             texts = forms.all_text_contents() if forms.count() else [lemmas.first.inner_text()]
             if any(normalize_headword(text) == wanted for text in texts):
                 exact.append(index)
-        if word_class:
-            for index in exact:
-                class_of(index)
-            exact = keep_word_class(exact, classes, word_class)
         matches = [(index, None) for index in exact]
         if not matches and form_entries:
             for index in range(min(form_entries, entries.count())):
@@ -279,11 +251,6 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                     grunnform = lemmas.first.locator('.grunnform')
                     base = (grunnform.first.inner_text() if grunnform.count() else lemmas.first.inner_text()).strip()
                     matches.append((index, base))
-            if word_class and matches:
-                for index, _ in matches:
-                    class_of(index)
-                kept = set(keep_word_class([index for index, _ in matches], classes, word_class))
-                matches = [(index, base) for index, base in matches if index in kept]
             if matches:
                 log(f'[LEXIN] {word!r} is an inflected form of ' + ', '.join(sorted({b for _, b in matches})))
         for index, base in matches:
