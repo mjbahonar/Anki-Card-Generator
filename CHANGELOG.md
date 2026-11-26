@@ -1,5 +1,11 @@
 # Release notes
 
+## v5.7.1 — 2026-11-26
+
+- Fixed every remaining word failing with "Target page, context or browser has been closed" after the browser closed mid-run (computer sleep, Chromium crash). The browser and Playwright's driver are now restarted automatically, with `WARN  browser: closed unexpectedly; restarting it` in the log; after 5 restarts in one run, browser sources are skipped with a clear message.
+- Compatibility: patch release. No configuration, CLI, cache, `app.api` or Anki changes.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check` on a local workbook, `git diff --check` and the flash-cards tests. Live: after closing the browser and after stopping Playwright's driver, the next page opened in a restarted browser, and a real Lexin lookup for *hus* succeeded after the browser was closed. A real Chromium crash (killed process) was not reproduced.
+
 ## v5.7.0 — 2026-11-26
 
 - Words that Lexin definitely does not have (*Ingen treff*, or no exact headword among the inspected results) are saved as "not found" and skipped on later runs, without expiry. Timeouts and errors are never saved this way. The run log shows `CACHE not in lexin (saved earlier)`.

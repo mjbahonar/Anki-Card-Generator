@@ -289,35 +289,80 @@ class SourceContext:
             self.capture_entry(''.join(str(el) for el in entries) or response.text, response.url)
         return response
 
+    MAX_BROWSER_RESTARTS = 5  # Per run; a browser that keeps dying is reported instead.
+
+    def _launch_browser(self):
+        # An expired source budget belongs to this source, not the browser.
+        timeout = self.timeout
+        try:
+            from playwright.sync_api import sync_playwright, TimeoutError as LaunchTimeout
+        except Exception as exc:
+            self.browser_error = f'Browser unavailable; run pip install -r requirements.txt. {exc}'
+            raise RuntimeError(self.browser_error) from exc
+        try:
+            if self.playwright is None:
+                self.playwright = sync_playwright().start()
+            self.browser = self.playwright.chromium.launch(
+                headless=self.config.section('runtime')['headless'], timeout=timeout * 1000)
+        except LaunchTimeout as exc:
+            # A slow cold start must not disable every later browser source.
+            raise TimeoutError(f'Browser launch timed out: {exc}') from exc
+        except Exception as exc:
+            self.browser_error = f'Browser unavailable; run python -m playwright install chromium. {exc}'
+            raise RuntimeError(self.browser_error) from exc
+
+    def _browser_alive(self):
+        try:
+            return self.browser.is_connected()
+        except Exception:
+            return False
+
+    @staticmethod
+    def _browser_closed_error(exc):
+        text = str(exc)
+        return any(part in text for part in ('has been closed', 'Target closed', 'Connection closed',
+                                             'Browser closed', 'browser has disconnected',
+                                             'Event loop is closed', 'Playwright already stopped'))
+
+    def _restart_browser(self):
+        """The browser (or Playwright's driver) went away, e.g. after sleep or a crash: start fresh."""
+        self.browser_restarts = getattr(self, 'browser_restarts', 0) + 1
+        for close in (lambda: self.browser.close(), lambda: self.playwright.stop()):
+            try:
+                close()
+            except Exception:
+                pass
+        self.browser, self.playwright = None, None
+        if self.browser_restarts > self.MAX_BROWSER_RESTARTS:
+            self.browser_error = 'The browser keeps closing unexpectedly; browser sources are skipped for this run'
+            raise RuntimeError(self.browser_error)
+        print('  WARN  browser: closed unexpectedly; restarting it', flush=True)
+
     @contextmanager
     def page(self):
         if self.browser_error:
             raise RuntimeError(self.browser_error)
+        if self.browser is not None and not self._browser_alive():
+            self._restart_browser()
         if self.browser is None:
-            # An expired source budget belongs to this source, not the browser.
-            timeout = self.timeout
-            try:
-                from playwright.sync_api import sync_playwright, TimeoutError as LaunchTimeout
-            except Exception as exc:
-                self.browser_error = f'Browser unavailable; run pip install -r requirements.txt. {exc}'
-                raise RuntimeError(self.browser_error) from exc
-            try:
-                if self.playwright is None:
-                    self.playwright = sync_playwright().start()
-                self.browser = self.playwright.chromium.launch(
-                    headless=self.config.section('runtime')['headless'], timeout=timeout * 1000)
-            except LaunchTimeout as exc:
-                # A slow cold start must not disable every later browser source.
-                raise TimeoutError(f'Browser launch timed out: {exc}') from exc
-            except Exception as exc:
-                self.browser_error = f'Browser unavailable; run python -m playwright install chromium. {exc}'
-                raise RuntimeError(self.browser_error) from exc
-        page = self.browser.new_page()
+            self._launch_browser()
+        try:
+            page = self.browser.new_page()
+        except Exception as exc:
+            if not self._browser_closed_error(exc):
+                raise
+            self._restart_browser()  # Closed between the check and the new page: one fresh attempt.
+            self._launch_browser()
+            page = self.browser.new_page()
         try:
             page.set_default_timeout(self.timeout * 1000)
             yield page
         finally:
-            page.close()
+            try:
+                page.close()
+            except Exception as exc:
+                if not self._browser_closed_error(exc):
+                    raise
 
     def browse(self, url, selector):
         with self.page() as page:
@@ -423,11 +468,19 @@ class SourceContext:
     def close(self):
         try:
             if self.browser:
-                self.browser.close()
+                try:
+                    self.browser.close()
+                except Exception as exc:
+                    if not self._browser_closed_error(exc):  # Already gone: nothing to close.
+                        raise
         finally:
             try:
                 if self.playwright:
-                    self.playwright.stop()
+                    try:
+                        self.playwright.stop()
+                    except Exception as exc:
+                        if not self._browser_closed_error(exc):
+                            raise
             finally:
                 self.session.close()
 
