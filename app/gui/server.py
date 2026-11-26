@@ -28,6 +28,8 @@ from app.gui import config_doc, i18n
 
 STATIC = Path(__file__).with_name('static')
 STATIC_FILES = {'index.html': 'text/html', 'app.css': 'text/css', 'app.js': 'text/javascript'}
+# Persian interface font (OFL), shared with the cards: fonts/ next to main.py.
+FONT_FILES = {'Vazirmatn.ttf': '_Vazirmatn.ttf', 'Vazirmatn-Bold.ttf': '_Vazirmatn-Bold.ttf'}
 PROGRESS = re.compile(r'^\[(\d+)/(\d+)\] (.*)$')
 MAX_LINES = 20000
 
@@ -194,7 +196,7 @@ def make_handler(app, port_holder):
             self.send_response(status)
             self.send_header('Content-Type', content_type + '; charset=utf-8')
             self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Cache-Control', 'max-age=86400' if content_type == 'font/ttf' else 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Content-Security-Policy',
                              "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:")
@@ -222,6 +224,12 @@ def make_handler(app, port_holder):
             if not self._allowed_host():
                 return self._send(HTTPStatus.FORBIDDEN, {'error': 'Forbidden host'})
             route, _, query = self.path.partition('?')
+            if route.startswith('/fonts/'):
+                source = FONT_FILES.get(route[len('/fonts/'):])
+                path = app.launcher.parent / 'fonts' / source if source else None
+                if not path or not path.is_file():
+                    return self._send(HTTPStatus.NOT_FOUND, {'error': 'Not found'})
+                return self._send(HTTPStatus.OK, path.read_bytes(), 'font/ttf')
             if route == '/' or route.startswith('/static/'):
                 name = 'index.html' if route == '/' else route[len('/static/'):]
                 if name not in STATIC_FILES:

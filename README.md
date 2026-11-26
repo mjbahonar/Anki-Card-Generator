@@ -2,7 +2,7 @@
 
 Turn your Excel list into a ready-to-import Anki deck, with dictionary meanings, examples and pronunciation. Start with words alone, or add typing, speaking, listening and gap exercises in the same workbook.
 
-[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.10.0**
+[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.11.0**
 
 ## How it works
 
@@ -47,7 +47,7 @@ Edit the existing sections in **`config.toml`**:
 
 The distributed configuration enables only **Lexin Bokmål–English**. For English, set the source language to `en` and enable compatible sources such as Cambridge, Oxford or Fastdic. Changing the language does not enable dictionaries automatically.
 
-Prefer forms over editing text? Run `python main.py --gui` to open a settings window in your browser. It edits the same `config.toml` (comments are kept): choose the workbook with **Browse…**, switch or add decks, turn and reorder dictionaries, browse and tidy the dictionary cache on the **Database** page, and use **Check**, **Run** and **Stop**, which start the same commands as below. Keep the terminal open while you use it.
+Prefer forms over editing text? Run `python main.py --gui` to open a settings window in your browser. It edits the same `config.toml` (comments are kept): choose the workbook with **Browse…**, switch or add decks, turn and reorder dictionaries, browse and tidy the dictionary cache on the **Database** page, and use **Check**, **Run** and **Stop**, which start the same commands as below. The window is available in English and Persian (choose at the bottom of the side bar). Keep the terminal open while you use it.
 
 Tip: in VS Code, install the recommended **Even Better TOML** extension for colored, validated `config.toml` editing.
 

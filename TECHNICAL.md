@@ -122,7 +122,7 @@ model_id = 1559328451
 - **Decks** (Output & deck page): pick the active deck from `[anki.saved_decks]`, add a new deck (the next free ID is suggested) or remove one from the list. Removing it from the list does not change Anki.
 - **Cache maintenance** (Advanced page) runs `--clear-source-cache` for one dictionary.
 - **Security.** The server listens on localhost only. API requests need a random per-session token from the printed link, and requests from other hosts or web origins are refused.
-- **Languages.** The interface is English. Its text lives in `app/gui/i18n.py`; to add a language, copy the `en` table under a new code and translate it (`dir = 'rtl'` for Persian or Arabic). Missing keys fall back to English, and a language picker appears once there is more than one.
+- **Languages.** English and Persian (فارسی). Pick the language at the bottom of the side bar; the choice is remembered in the browser. Persian is right-to-left and uses the Vazirmatn font from `fonts/` (OFL); paths, codes and IDs stay left-to-right. English text is in `app/gui/i18n.py`, Persian in `app/gui/strings_fa.py`; to add a language, add a module like `strings_fa.py` and register it at the end of `i18n.py`. Missing keys fall back to English. Messages from `main.py` (log, validation errors) stay English.
 
 The GUI needs `tomlkit` (included in `requirements.txt`). It does not change `app.api`, the card output or the Anki schema.
 

@@ -1,8 +1,9 @@
 """Interface text for the settings GUI.
 
-The GUI is English today. To add a language later, copy the ``'en'`` dictionary
-below under a new code (for example ``'fa'``), translate the values and set
-``_meta.dir`` to ``'rtl'`` for right-to-left scripts. Missing keys fall back to
+English is below; Persian is in strings_fa.py. To add a language, copy the ``'en'``
+dictionary into a new module (like strings_fa.py), translate the values, set
+``_meta.dir`` to ``'rtl'`` for right-to-left scripts and register it at the end
+of this file. Missing keys fall back to
 English, labels fall back to the config key name and help text falls back to
 the comment written next to the setting in config.toml. A language selector
 appears in the GUI automatically once more than one language exists.
@@ -243,8 +244,16 @@ STRINGS = {
         'confirm.discard': 'Discard all unsaved changes?',
         'confirm.reload': 'Reload config.toml from disk? Unsaved changes will be lost.',
         'language.label': 'Interface language',
+        'dialog.cancel': 'Cancel',
+        'dialog.ok': 'OK',
+        'dialog.close': 'Close',
+        'error.token': 'Open the GUI with the link printed by: python main.py --gui',
     },
 }
+
+from app.gui.strings_fa import FA  # noqa: E402  (one module per language keeps this file readable)
+
+STRINGS['fa'] = FA
 
 
 def strings(language=None):

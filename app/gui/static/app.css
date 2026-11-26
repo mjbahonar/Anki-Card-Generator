@@ -1,3 +1,5 @@
+@font-face { font-family: "Vazirmatn"; src: url("/fonts/Vazirmatn.ttf") format("truetype"); font-weight: 100 600; font-display: swap; }
+@font-face { font-family: "Vazirmatn"; src: url("/fonts/Vazirmatn-Bold.ttf") format("truetype"); font-weight: 650 900; font-display: swap; }
 :root {
   --bg: #f5f6fa;
   --panel: #ffffff;
@@ -44,6 +46,21 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* Persian interface: Vazirmatn; settings values (paths, codes, IDs) stay left-to-right. */
+:root[lang="fa"], :root[lang="fa"] button, :root[lang="fa"] input, :root[lang="fa"] select, :root[lang="fa"] textarea {
+  font-family: "Vazirmatn", "Segoe UI", system-ui, sans-serif; }
+:root[lang="fa"] body { font-size: 14.5px; line-height: 1.7; }
+:root[lang="fa"] h1 { letter-spacing: 0; }
+[dir="rtl"] input[type="text"], [dir="rtl"] input[type="number"], [dir="rtl"] input[type="search"],
+[dir="rtl"] textarea, [dir="rtl"] .field-label .key, [dir="rtl"] .config-path code,
+[dir="rtl"] .card-head .hint, [dir="rtl"] .deck-row code { direction: ltr; unicode-bidi: isolate; }
+[dir="rtl"] input[type="text"], [dir="rtl"] input[type="number"], [dir="rtl"] textarea { text-align: left; }
+[dir="rtl"] .db-table td:not(:last-child), [dir="rtl"] .tile strong, [dir="rtl"] .db-meta bdi {
+  direction: ltr; unicode-bidi: isolate; text-align: right; }
+[dir="rtl"] .field-label .key { text-align: right; }
+[dir="rtl"] .chip { padding: 3px 10px 3px 4px; }
+[dir="rtl"] .db-row, [dir="rtl"] .deck-row { padding: 6px 12px 6px 6px; }
+[dir="rtl"] .switch input:checked + span::after { transform: translateX(-18px); }
 html, body { margin: 0; height: 100%; }
 body { font-size: 14px; line-height: 1.45; }
 button, input, select, textarea { font: inherit; color: inherit; }

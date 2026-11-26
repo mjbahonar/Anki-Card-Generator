@@ -173,6 +173,13 @@ class ServerTests(unittest.TestCase):
         connection.close()
         return response.status, data
 
+    def test_persian_font_is_served_from_the_fonts_folder_only(self):
+        status, data = self.request('GET', '/fonts/Vazirmatn.ttf', token=False)
+        self.assertEqual(status, 200)
+        self.assertEqual(data[:4], (ROOT / 'fonts' / '_Vazirmatn.ttf').read_bytes()[:4])
+        self.assertEqual(self.request('GET', '/fonts/../config.toml', token=False)[0], 404)
+        self.assertEqual(self.request('GET', '/fonts/Vazir%20Bold.ttf', token=False)[0], 404)
+
     def test_page_is_public_but_api_needs_token_local_host_and_same_origin(self):
         status, page = self.request('GET', '/', token=False)
         self.assertEqual(status, 200)
@@ -233,6 +240,20 @@ class DatabaseEndpointTests(ServerTests):
 
 
 class StringsTests(unittest.TestCase):
+    def test_persian_covers_every_string_and_setting_with_the_same_placeholders(self):
+        import re
+        en, fa = i18n.STRINGS['en'], i18n.STRINGS['fa']
+        self.assertEqual(fa['_meta']['dir'], 'rtl')
+        self.assertEqual([k for k in en if k not in fa and not k.startswith('source.')], [])
+        for key, text in fa.items():
+            if key in en and key != '_meta':
+                self.assertEqual(set(re.findall(r'\{\w+\}', text)), set(re.findall(r'\{\w+\}', en[key])), key)
+        schema = config_doc.describe(ROOT / 'config.toml')
+        unlabeled = ['.'.join(f['path']) for tab in schema['tabs'] for g in tab['groups'] for f in g['fields']
+                     if 'field.' + '.'.join(f['path']) not in fa and 'field.' + f['key'] not in fa]
+        self.assertEqual(unlabeled, [])
+        self.assertEqual(i18n.strings('fa')['action.run'], 'اجرا')
+
     def test_other_languages_fall_back_to_english(self):
         self.assertEqual(i18n.strings('xx')['action.run'], 'Run')
         self.assertEqual(i18n.languages()[0]['code'], i18n.DEFAULT_LANGUAGE)

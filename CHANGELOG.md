@@ -1,5 +1,11 @@
 # Release notes
 
+## v5.11.0 — 2026-11-26
+
+- Settings GUI in Persian: every page, button, message, setting label and help text, right-to-left, with the Vazirmatn font from `fonts/`. Choose فارسی at the bottom of the side bar; the choice is remembered. Paths, codes, IDs, sizes and dates stay left-to-right. Persian text lives in `app/gui/strings_fa.py`.
+- Compatibility: backward-compatible minor release. No configuration, CLI, cache, Anki or `app.api` changes; English stays the default interface language.
+- Validation: full automated test suite on a clean copy of this commit (including a test that every English string and every setting has a Persian label with the same placeholders, and that the font route serves only the bundled Vazirmatn files), `python main.py --check`, `git diff --check` and the flash-cards tests. In the browser: Persian Excel input, Dictionaries and Database pages, right-to-left layout, Vazirmatn loaded, sizes and dates left-to-right. Known limitation: `main.py` log lines, validation errors and the PDF report stay English.
+
 ## v5.10.0 — 2026-11-26
 
 - Words written with `å`, `en`, `ei`, `et` or a final `!` are looked up without them in every dictionary. In Lexin the marker selects the entry: `å` keeps verbs, `en`/`ei`/`et` keep nouns (preferring that gender), so `en skål` is the bowl, not *skål!*. After `å`, an a-infinitive is tried with -e (`å kjøpa` → *kjøpe*, indirect) instead of the noun form *kjøpa*. Previously such words got unrelated Lexin results rejected and were saved as "not found".

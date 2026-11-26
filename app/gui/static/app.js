@@ -113,6 +113,7 @@ async function load(keepBanner = false) {
   document.documentElement.lang = state.lang;
   document.title = t('app.title') + ' — ' + t('app.subtitle');
   document.querySelectorAll('[data-t]').forEach((node) => { node.textContent = t(node.dataset.t); });
+  document.querySelectorAll('[data-t-label]').forEach((node) => { node.setAttribute('aria-label', t(node.dataset.tLabel)); });
   $('#version').textContent = 'v' + info.app_version;
   $('#config-path').textContent = info.config_path;
 
@@ -176,7 +177,7 @@ function renderGroup(group) {
   if (dotted(group.path) === 'anki') return renderDecks(group);
   return el('div', { class: 'card' },
     el('div', { class: 'card-head' }, el('h2', { text: groupTitle(group) }),
-      group.help ? el('span', { class: 'hint', text: group.help }) : null),
+      group.help ? el('span', { class: 'hint', text: t('grouphelp.' + dotted(group.path), {}, group.help) }) : null),
     el('div', { class: 'card-body' }, group.fields.map(renderField)));
 }
 
@@ -291,7 +292,8 @@ function chips(field) {
       field.mode === 'ordered' ? el('span', { class: 'n', text: String(index + 1) }) : null,
       item,
       field.mode === 'ordered' && index > 0 ? el('button', {
-        type: 'button', title: t('list.move_left'), 'aria-label': t('list.move_left'), text: '‹',
+        type: 'button', title: t('list.move_left'), 'aria-label': t('list.move_left'),
+        text: document.documentElement.dir === 'rtl' ? '›' : '‹',
         onclick: () => { const next = [...items]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; update(next); },
       }) : null,
       el('button', {
@@ -357,7 +359,8 @@ function renderSources(tab) {
         el('span', { class: 'source-rank', text: rank }),
         el('div', { class: 'source-text' },
           el('span', { class: 'source-name', text: groupTitle(group) }),
-          enabledField && enabledField.help ? el('span', { class: 'source-desc', text: enabledField.help }) : null),
+          enabledField && enabledField.help ? el('span', { class: 'source-desc',
+            text: t('help.' + dotted(enabledField.path), {}, enabledField.help) }) : null),
         el('div', { class: 'source-tools' },
           el('button', { class: 'icon-btn', title: t('source.up'), 'aria-label': t('source.up'), disabled: index === 0, html: CHEVRON_UP, onclick: () => move(-1) }),
           el('button', { class: 'icon-btn', title: t('source.down'), 'aria-label': t('source.down'), disabled: index === total - 1, html: CHEVRON_DOWN, onclick: () => move(1) }),
@@ -426,10 +429,10 @@ function renderDecks(group) {
 const db = { q: '', source: '', status: '', rows: [], total: 0, open: new Set(), selected: new Set() };
 
 function formatBytes(bytes) {
-  if (!bytes) return '0 B';
+  if (!bytes) return '⁦0 B⁩';
   const units = ['B', 'KB', 'MB', 'GB'];
   const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-  return (bytes / 1024 ** i).toFixed(i ? 1 : 0) + ' ' + units[i];
+  return '⁦' + (bytes / 1024 ** i).toFixed(i ? 1 : 0) + ' ' + units[i] + '⁩'; // Isolated: stays "1.5 KB" in RTL.
 }
 const sourceName = (s) => t('source.' + s, {}, humanize(s));
 
@@ -490,7 +493,7 @@ async function loadStats(card) {
         tile(t('db.not_found'), String(stats.not_found), t('db.not_found_sub')),
         tile(t('db.audio'), String(audio.files), formatBytes(audio.bytes)),
         tile(t('db.media'), formatBytes(stats.media_bytes), stats.media.map((m) => `${m.kind}: ${m.files}`).join(' · ')),
-        tile(t('db.text'), formatBytes(stats.text_bytes), stats.oldest ? t('db.since', { date: stats.oldest.slice(0, 10) }) : '')),
+        tile(t('db.text'), formatBytes(stats.text_bytes), stats.oldest ? t('db.since', { date: '⁦' + stats.oldest.slice(0, 10) + '⁩' }) : '')),
       table)
       : el('div', { class: 'card-body', text: t('db.missing') }));
   const filter = document.querySelector('#db-source');
@@ -577,7 +580,9 @@ function renderDbRow(row) {
     el('span', { class: 'badge ' + (row.not_found ? 'warn' : row.indirect.length ? 'info' : 'ok'),
       title: row.indirect.length ? t('db.indirect_help') : '',
       text: row.not_found ? t('db.not_found') : row.indirect.length ? t('db.indirect_of', { base: row.indirect.join(', ') }) : t('db.found') }),
-    el('span', { class: 'db-meta', text: [formatBytes(row.text_bytes), row.media_files ? `${row.media_files} ${t('db.files')} · ${formatBytes(row.media_bytes)}` : '', (row.saved_at || '').slice(0, 16)].filter(Boolean).join(' · ') }),
+    el('span', { class: 'db-meta' }, [formatBytes(row.text_bytes), row.media_files ? `${row.media_files} ${t('db.files')}` : '',
+      row.media_files ? formatBytes(row.media_bytes) : '', (row.saved_at || '').slice(0, 16)].filter(Boolean)
+      .flatMap((part, i) => [i ? ' · ' : null, el('bdi', { text: part })])),
     el('span', { class: 'db-actions' },
       el('button', { class: 'btn ghost small', text: t('db.fetch_again'), disabled: state.job.running, title: t('db.fetch_again_help'),
         onclick: () => start('refresh_word', { word: row.word, source: row.source }) }),
@@ -800,7 +805,7 @@ async function boot() {
   try {
     await load();
   } catch (error) {
-    banner('error', error.status === 403 ? 'Open the GUI with the link printed by: python main.py --gui' : error.error);
+    banner('error', error.status === 403 ? t('error.token', {}, 'Open the GUI with the link printed by: python main.py --gui') : error.error);
   }
 }
 
