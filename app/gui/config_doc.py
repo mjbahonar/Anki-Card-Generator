@@ -56,6 +56,8 @@ CHOICES = {
 }
 FILE_FIELDS = {'input.file': ('.xlsx', '.xlsm', '.xls'), 'style.file': ('.css',)}
 LONG_TEXT = {'info.text'}
+# Settings that take a name or a zero-based number (sheet name or index, column header or index).
+NAME_OR_INDEX = {'input.sheet', 'input.word_column'}
 DECKS = ['anki', 'saved_decks']  # Saved deck names and IDs; deck_name/deck_id hold the active one.
 
 
@@ -99,6 +101,9 @@ def _field(path, item):
     dotted = '.'.join(path)
     kind = _kind(item, value)
     field = {'key': path[-1], 'path': path, 'type': kind, 'value': value, 'help': _comment(item)}
+    if dotted in NAME_OR_INDEX and kind in ('int', 'str'):
+        field['type'] = 'name_or_index'
+        field['value'] = str(value)
     if kind == 'raw':
         field['value'] = json.dumps(value, ensure_ascii=False)
     if kind == 'str' and (dotted in LONG_TEXT or '\n' in value):
@@ -159,6 +164,12 @@ def describe(path):
 
 def _coerce(path, existing, value):
     dotted = '.'.join(path)
+    if dotted in NAME_OR_INDEX:
+        # Digits mean a zero-based position; anything else is a sheet or column name.
+        text = str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ''
+        if not text:
+            raise EditError(f'{dotted} needs a name or a number (0 = first)')
+        return int(text) if text.isdigit() else text
     kind = _kind(existing, existing.unwrap() if hasattr(existing, 'unwrap') else existing)
     if kind == 'bool':
         if not isinstance(value, bool):

@@ -208,6 +208,9 @@ function control(field, id) {
           if (ok) setValue(field, number);
         },
       });
+    case 'name_or_index':
+      return el('input', { id, type: 'text', value, spellcheck: 'false', placeholder: t('field.name_or_index'),
+        oninput: (e) => { markInvalid(key, !e.target.value.trim()); setValue(field, e.target.value.trim()); } });
     case 'text':
       return el('textarea', { id, oninput: (e) => setValue(field, e.target.value) }, value);
     case 'raw':

@@ -1,5 +1,11 @@
 # Release notes
 
+## v5.6.1 — 2026-11-26
+
+- Fixed the settings GUI marking a worksheet name (for example `FINAL`) as invalid in **Worksheet** (`input.sheet`). Worksheet and **Input column** (`input.word_column`) now accept a name or a zero-based number in the GUI, as `config.toml` always allowed. Digits are saved as a position (`2` = third sheet); anything else is saved as a name.
+- Compatibility: patch release. No configuration, CLI, `app.api` or Anki changes.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check` on a local workbook, `git diff --check`, the flash-cards tests, and in the browser: saving `FINAL` as the worksheet wrote `sheet = "FINAL"` with its comment kept.
+
 ## v5.6.0 — 2026-11-26
 
 - Added a settings GUI: `python main.py --gui` opens a local browser page that edits `config.toml` in place (comments kept, validated with the same rules as `main.py`), reorders dictionaries, and has Check, Run and Stop buttons with a live log. Stop saves finished words like Ctrl+C. The interface is English; its text is in `app/gui/i18n.py` so other languages can be added later. New dependency: `tomlkit`. `app.api`, card output and the Anki schema are unchanged.

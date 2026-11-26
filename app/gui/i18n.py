@@ -140,6 +140,9 @@ STRINGS = {
         'deck.error_name': 'Enter a deck name that is not already in the list.',
         'deck.error_id': 'Enter a whole-number deck ID (1 or more) that no other saved deck uses.',
 
+        'field.name_or_index': 'Name, or number (0 = first)',
+        'help.input.sheet': 'Worksheet name (for example FINAL) or its position: 0 = first, 1 = second.',
+        'help.input.word_column': 'Column header name (needs "First row is a header") or its position: 0 = first column.',
         'file.browse': 'Browse…',
         'file.refresh': 'Refresh the file list and check the file again',
         'file.found': '✓ File found',

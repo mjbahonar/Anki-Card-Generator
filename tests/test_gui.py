@@ -74,6 +74,21 @@ class ConfigDocTests(unittest.TestCase):
         self.assertEqual(self.text.count('#'), changed.count('#'))
         self.assertNotIn('\n\n\n', changed.replace('\r', ''))
 
+    def test_sheet_and_column_accept_a_name_or_a_number(self):
+        fields = {'.'.join(f['path']): f for tab in config_doc.describe(self.path)['tabs']
+                  for g in tab['groups'] for f in g['fields']}
+        self.assertEqual(fields['input.sheet']['type'], 'name_or_index')
+        self.assertEqual(fields['input.word_column']['type'], 'name_or_index')
+        named = config_doc.apply_changes(self.text, [{'path': ['input', 'sheet'], 'value': 'FINAL'},
+                                                     {'path': ['input', 'word_column'], 'value': 'Word'}])
+        self.assertEqual(tomllib.loads(named)['input']['sheet'], 'FINAL')
+        self.assertEqual(tomllib.loads(named)['input']['word_column'], 'Word')
+        back = config_doc.apply_changes(named, [{'path': ['input', 'sheet'], 'value': '2'}])
+        self.assertEqual(tomllib.loads(back)['input']['sheet'], 2)  # Digits are a position, not a sheet named "2".
+        self.assertIn('# First worksheet, or its name', named)
+        with self.assertRaises(config_doc.EditError):
+            config_doc.apply_changes(self.text, [{'path': ['input', 'sheet'], 'value': '  '}])
+
     def test_wrong_types_unknown_keys_and_bad_order_are_refused(self):
         bad = [
             [{'path': ['sources', 'lexin', 'enabled'], 'value': 'yes'}],
