@@ -94,10 +94,9 @@ class DictionaryCache:
             db.close()
         return info
 
-    def search(self, query='', source=None, status=None, limit=100, offset=0):
-        """Cached results whose word contains query; status is None, 'found' or 'not_found'."""
-        if not self.path.is_file():
-            return {'total': 0, 'rows': []}
+    @staticmethod
+    def _filter(query='', source=None, status=None):
+        """SQL WHERE clause (on alias r) for a word search, dictionary and found/not-found status."""
         where, args = [], []
         if query.strip():
             where.append("r.word LIKE ? ESCAPE '!'")
@@ -109,7 +108,13 @@ class DictionaryCache:
             where.append("r.content != ''")
         elif status == 'not_found':
             where.append("r.content = ''")
-        clause = (' WHERE ' + ' AND '.join(where)) if where else ''
+        return (' WHERE ' + ' AND '.join(where)) if where else '', args
+
+    def search(self, query='', source=None, status=None, limit=100, offset=0):
+        """Cached results whose word contains query; status is None, 'found' or 'not_found'."""
+        if not self.path.is_file():
+            return {'total': 0, 'rows': []}
+        clause, args = self._filter(query, source, status)
         db = self.connect()
         try:
             total = db.execute('SELECT COUNT(*) FROM results r' + clause, args).fetchone()[0]
@@ -155,6 +160,22 @@ class DictionaryCache:
         try:
             with db:
                 count = sum(db.execute('DELETE FROM results WHERE key=?', (key,)).rowcount for key in keys)
+                db.execute('DELETE FROM assets WHERE NOT EXISTS '
+                           '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+            return count
+        finally:
+            db.close()
+
+    def delete_matching(self, query='', source=None, status=None):
+        """Remove every result a search would list (same filters); unused backups go too."""
+        if not self.path.is_file():
+            return 0
+        clause, args = self._filter(query, source, status)
+        db = self.connect()
+        try:
+            with db:
+                count = db.execute('DELETE FROM results WHERE key IN (SELECT r.key FROM results r' + clause + ')',
+                                   args).rowcount
                 db.execute('DELETE FROM assets WHERE NOT EXISTS '
                            '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
             return count

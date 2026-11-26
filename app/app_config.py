@@ -163,7 +163,7 @@ def load_config(path, check_files=True):
             raise ConfigError(f'Unknown source: {name}. Available: {", ".join(SOURCE_SPECS)}')
         if not isinstance(settings, dict) or type(settings.get('enabled')) is not bool:
             raise ConfigError(f'sources.{name}.enabled must be true or false')
-        allowed = ({'enabled', 'variant', 'table_audio', 'entries'} if name == 'lexin' else
+        allowed = ({'enabled', 'variant', 'table_audio', 'entries', 'form_entries'} if name == 'lexin' else
                    {'enabled', 'count', 'priority'} if name == 'images' else
                    {'enabled', 'examples_per_definition'} if name in ['fastdic', 'cambridge', 'oxford'] else {'enabled'})
         if set(settings) - allowed:
@@ -172,6 +172,9 @@ def load_config(path, check_files=True):
             raise ConfigError('sources.lexin.variant must be bokmal, nynorsk or both')
         if name == 'lexin' and type(settings.get('table_audio', False)) is not bool:
             raise ConfigError('sources.lexin.table_audio must be true or false')
+        if name == 'lexin' and (type(settings.get('form_entries', 3)) is not int
+                                or not 0 <= settings.get('form_entries', 3) <= 10):
+            raise ConfigError('sources.lexin.form_entries must be a whole number from 0 to 10 (0 = off)')
         if name == 'lexin' and (type(settings.get('entries', 2)) is not int or not 1 <= settings.get('entries', 2) <= 10):
             raise ConfigError('sources.lexin.entries must be between 1 and 10')
         if name == 'images' and (type(settings.get('count', 3)) is not int or not 1 <= settings.get('count', 3) <= 10):

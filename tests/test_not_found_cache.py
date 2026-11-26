@@ -143,6 +143,15 @@ class CacheBrowserTests(unittest.TestCase):
         self.assertEqual(self.cache.search(status='found')['total'], 3)
         self.assertEqual(len(self.cache.search(limit=2)['rows']), 2)
 
+    def test_delete_matching_uses_the_same_filters_as_search(self):
+        self.assertEqual(self.cache.delete_matching('hus', source='oxford'), 1)
+        self.assertEqual(self.cache.delete_matching(status='not_found'), 1)
+        self.assertEqual([r['word'] for r in self.cache.search()['rows']], ['100%_sikker', 'hus'])
+        self.assertEqual(self.cache.delete_matching('%'), 1)  # Literal %, not "everything".
+        self.assertEqual(self.cache.delete_matching(), 1)
+        with closing(sqlite3.connect(self.cache.path)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM assets').fetchone()[0], 0)
+
     def test_entry_delete_forget_and_compact(self):
         entry = self.cache.entry('k-hus')
         self.assertEqual((entry['content'], entry['not_found'], entry['media'][0]['filename']), ('<p>house</p>', False, 'hus.mp3'))

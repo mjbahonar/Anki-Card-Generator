@@ -297,6 +297,12 @@ def make_handler(app, port_holder):
                         if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
                             raise ValueError('keys must be a list')
                         return self._send(HTTPStatus.OK, {'removed': cache.delete_keys(keys)})
+                    if self.path == '/api/db/delete_matching':
+                        status = body.get('status') or None
+                        if status not in (None, 'found', 'not_found'):
+                            raise ValueError('Unknown status filter')
+                        return self._send(HTTPStatus.OK, {'removed': cache.delete_matching(
+                            str(body.get('q') or ''), body.get('source') or None, status)})
                     if self.path == '/api/db/forget_not_found':
                         return self._send(HTTPStatus.OK, {'removed': cache.delete_not_found(body.get('source') or None)})
                     if self.path == '/api/db/compact':

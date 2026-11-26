@@ -423,7 +423,7 @@ function renderDecks(group) {
 }
 
 // ---------------------------------------------------------------- database tab
-const db = { q: '', source: '', status: '', rows: [], total: 0, open: new Set(), entries: new Map() };
+const db = { q: '', source: '', status: '', rows: [], total: 0, open: new Set(), selected: new Set() };
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B';
@@ -475,6 +475,9 @@ async function loadStats(card) {
     el('div', { class: 'card-head' }, el('h2', { text: t('db.overview') }), el('span', { class: 'hint', text: stats.path }),
       el('span', { class: 'spacer' }),
       el('button', { class: 'btn ghost small', text: t('db.refresh'), onclick: () => renderPage() }),
+      stats.not_found ? el('button', { class: 'btn ghost small', text: t('db.forget_all_not_found', { count: stats.not_found }),
+        disabled: state.job.running,
+        onclick: () => dbAction('/api/db/forget_not_found', {}, t('db.forget_all_confirm', { count: stats.not_found })) }) : null,
       el('button', { class: 'btn small', text: t('db.compact'), disabled: state.job.running || !stats.exists, onclick: async () => {
         const result = await dbAction('/api/db/compact', {});
         if (result) banner('ok', t('db.compacted', { before: formatBytes(result.before), after: formatBytes(result.after) }));
@@ -504,6 +507,33 @@ async function renderSearch(card, reset) {
     .map(([v, label]) => el('option', { value: v, text: label, selected: v === db.status })));
   const list = el('div', { class: 'db-rows' });
   const count = el('span', { class: 'hint' });
+  const selectAll = el('input', { type: 'checkbox', 'aria-label': t('db.select_all'), title: t('db.select_all') });
+  const deleteSelected = el('button', { class: 'btn small danger-text', disabled: true });
+  const deleteMatching = el('button', { class: 'btn small danger-text' });
+  const updateBulk = () => {
+    const shown = db.rows.map((r) => r.key);
+    db.selected = new Set([...db.selected].filter((k) => shown.includes(k)));
+    deleteSelected.textContent = t('db.delete_selected', { count: db.selected.size });
+    deleteSelected.disabled = !db.selected.size || state.job.running;
+    selectAll.checked = shown.length > 0 && shown.every((k) => db.selected.has(k));
+    selectAll.indeterminate = db.selected.size > 0 && !selectAll.checked;
+    deleteMatching.textContent = t('db.delete_matching', { count: db.total });
+    deleteMatching.disabled = !db.total || state.job.running;
+  };
+  db.updateBulk = updateBulk;
+  selectAll.addEventListener('change', () => {
+    db.selected = selectAll.checked ? new Set(db.rows.map((r) => r.key)) : new Set();
+    list.querySelectorAll('.db-check').forEach((box) => { box.checked = selectAll.checked; });
+    updateBulk();
+  });
+  deleteSelected.addEventListener('click', () => dbAction('/api/db/delete', { keys: [...db.selected] },
+    t('db.delete_selected_confirm', { count: db.selected.size })).then((r) => { if (r) db.selected.clear(); }));
+  deleteMatching.addEventListener('click', () => {
+    const filters = [db.q && `"${db.q}"`, db.source && sourceName(db.source),
+      db.status && (db.status === 'not_found' ? t('db.not_found') : t('db.found'))].filter(Boolean).join(' · ') || t('db.all');
+    dbAction('/api/db/delete_matching', { q: db.q, source: db.source, status: db.status },
+      t('db.delete_matching_confirm', { count: db.total, filters }));
+  });
   const run = async (more) => {
     db.q = input.value.trim(); db.source = source.value; db.status = status.value;
     const offset = more ? db.rows.length : 0;
@@ -518,6 +548,7 @@ async function renderSearch(card, reset) {
     count.textContent = t('db.showing', { shown: db.rows.length, total: db.total });
     list.replaceChildren(...(db.rows.length ? db.rows.map(renderDbRow) : [el('div', { class: 'db-empty', text: t('db.no_rows') })]));
     if (db.rows.length < db.total) list.append(el('button', { class: 'btn ghost', text: t('db.more'), onclick: () => run(true) }));
+    updateBulk();
   };
   let timer = null;
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => run(false), 300); });
@@ -525,14 +556,18 @@ async function renderSearch(card, reset) {
   status.addEventListener('change', () => run(false));
   card.replaceChildren(
     el('div', { class: 'card-head' }, el('h2', { text: t('db.search') }), count),
-    el('div', { class: 'card-body' }, el('div', { class: 'db-filters' }, input, source, status), list));
+    el('div', { class: 'card-body' }, el('div', { class: 'db-filters' }, input, source, status),
+      el('div', { class: 'db-bulk' }, el('label', { class: 'db-select-all' }, selectAll, el('span', { text: t('db.select_all') })),
+        el('span', { class: 'spacer' }), deleteSelected, deleteMatching), list));
   run(false);
 }
 
 function renderDbRow(row) {
   const open = db.open.has(row.key);
   const details = el('div', { class: 'db-details' });
-  const line = el('div', { class: 'db-row' + (open ? ' open' : '') },
+  const check = el('input', { type: 'checkbox', class: 'db-check', checked: db.selected.has(row.key), 'aria-label': row.word,
+    onchange: (e) => { if (e.target.checked) db.selected.add(row.key); else db.selected.delete(row.key); db.updateBulk?.(); } });
+  const line = el('div', { class: 'db-row' + (open ? ' open' : '') }, check,
     el('button', { class: 'db-word', text: row.word, title: t('db.view'), onclick: () => {
       if (db.open.has(row.key)) db.open.delete(row.key); else db.open.add(row.key);
       line.replaceWith(renderDbRow(row));

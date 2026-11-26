@@ -223,6 +223,10 @@ class DatabaseEndpointTests(ServerTests):
         self.assertEqual(self.request('POST', '/api/db/delete', {'keys': ['k1']})[0], 409)
         self.app.job = None
         self.assertEqual(json.loads(self.request('POST', '/api/db/delete', {'keys': ['k1']})[1])['removed'], 1)
+        store.put('k3', 'oxford', 'bil', '<p>car</p>', '', [], [])
+        self.assertEqual(self.request('POST', '/api/db/delete_matching', {'status': 'bogus'})[0], 400)
+        self.assertEqual(json.loads(self.request('POST', '/api/db/delete_matching',
+                                                 {'q': 'bi', 'source': 'oxford'})[1])['removed'], 1)
         self.assertEqual(json.loads(self.request('POST', '/api/db/forget_not_found', {})[1])['removed'], 1)
         self.assertEqual(self.request('POST', '/api/db/compact', {})[0], 200)
         self.assertEqual(self.request('POST', '/api/run', {'kind': 'refresh_word', 'word': ' '})[0], 400)

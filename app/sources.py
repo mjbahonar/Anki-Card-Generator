@@ -202,6 +202,8 @@ class SourceContext:
         except (OSError, ValueError, sqlite3.Error) as exc:
             self.issue(word, 'dictionary_cache', exc)
             cached = None
+        if cached is not None and not cached[0] and name == 'lexin' and not lexin_absence_current(cached[2], self.config):
+            cached = None  # Saved before inflected forms were checked (or with another form_entries): check again.
         if cached is not None:
             content, sound, documents = cached
             self.last_not_found = not content
@@ -216,6 +218,7 @@ class SourceContext:
         self.cache_capture = capture
         errors = len(self.errors)
         self.definitely_absent = False
+        self.absent_details = {}
         try:
             content = loader()
             self.check_budget()
@@ -223,7 +226,7 @@ class SourceContext:
                     and not any(e['source'] not in ('media_copy', 'dictionary_media') for e in self.errors[errors:])):
                 # The dictionary answered and the word is not in it: remember that, so later runs skip it.
                 try:
-                    self.dictionary_cache.put(key, name, word, '', '', [], [])
+                    self.dictionary_cache.put(key, name, word, '', '', [dict(not_found=True, **self.absent_details)], [])
                 except (OSError, sqlite3.Error) as exc:
                     self.issue(word, 'dictionary_cache', exc)
                 return content
@@ -454,6 +457,7 @@ class SourceContext:
                     table_cached_fallback=self.cached_table_audio_fallback,
                     on_entry=lambda markup: self.capture_entry(markup, page.url),
                     max_entries=self.config.section('sources').get('lexin', {}).get('entries', 2),
+                    form_entries=lexin_form_entries(self.config),
                     on_not_found=lambda selected=selected: absent.append(selected))
             contents.append(content)
             sound = selected_sound or sound
@@ -463,6 +467,7 @@ class SourceContext:
         self.lexin_results[word] = (content, cached or sound)
         if not content and len(absent) == len(variants):
             self.definitely_absent = True  # Every selected Lexin variant answered "not there".
+            self.absent_details = {'form_entries': lexin_form_entries(self.config)}
         return content
 
     def close(self):
@@ -483,6 +488,17 @@ class SourceContext:
                             raise
             finally:
                 self.session.close()
+
+
+def lexin_form_entries(config):
+    """How many Lexin results are checked for an inflected form when no headword matches (0 = off)."""
+    return config.section('sources').get('lexin', {}).get('form_entries', 3)
+
+
+def lexin_absence_current(documents, config):
+    """A saved Lexin "not found" still holds if it was decided with today's form_entries setting."""
+    marker = next((d for d in documents if isinstance(d, dict) and d.get('not_found')), None)
+    return bool(marker) and marker.get('form_entries') == lexin_form_entries(config)
 
 
 def dictionary_content(name, word, number, ctx):

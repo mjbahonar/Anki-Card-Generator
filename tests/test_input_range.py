@@ -52,6 +52,23 @@ class InputRangeTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, 'No words in Excel rows 4–4'):
             self.words(first_row=4, last_row=4)
 
+    def test_lexin_form_entries_is_optional_and_limited(self):
+        import tomlkit
+        base = (ROOT / 'config.toml').read_text(encoding='utf-8')
+        for value, valid in [(None, True), (0, True), (3, True), (10, True), (11, False), (-1, False), (True, False)]:
+            doc = tomlkit.parse(base)
+            if 'form_entries' in doc['sources']['lexin']:
+                del doc['sources']['lexin']['form_entries']
+            if value is not None:
+                doc['sources']['lexin']['form_entries'] = value
+            self.config_path.write_text(tomlkit.dumps(doc), encoding='utf-8')
+            with self.subTest(value=value):
+                if valid:
+                    load_config(self.config_path, check_files=False)
+                else:
+                    with self.assertRaises(ConfigError):
+                        load_config(self.config_path, check_files=False)
+
     def test_loader_rejects_reversed_or_negative_ranges_and_keeps_old_configs_valid(self):
         import tomlkit
         base = (ROOT / 'config.toml').read_text(encoding='utf-8')

@@ -1,5 +1,13 @@
 # Release notes
 
+## v5.8.0 — 2026-11-26
+
+- Lexin finds inflected forms: without an exact headword, the first `sources.lexin.form_entries` results (default 3; `0` = off) are checked for the input in their inflection tables (*gikk → gå*, *husene → hus*, *bøker → bøk, bok*, *større → stor*). Matching entries get a short `gikk → gå` note; the headword recording is skipped for them, so pronunciation comes from the next audio provider. Exact headwords still win.
+- "Not found" Lexin results saved before this, or with another `form_entries`, are checked again automatically; found results are kept.
+- Database page: checkboxes with **Delete selected**, **Delete all matching** (current search and filters) and **Recheck all not found**.
+- Compatibility: backward-compatible minor release. `sources.lexin.form_entries` is optional (default 3), so older configs remain valid; set it to `0` for the previous exact-only behavior. Found results in existing caches are reused; only saved "not found" Lexin results are checked again. Words found through a form show a `gikk → gå` line in the Lexin field (styled by a new `.lexin-form-note` rule in `Styles/cards.css`); Anki fields, model IDs, note GUIDs and `app.api` are unchanged.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check` on a local workbook, `git diff --check` and the flash-cards tests. Live on a copy of a real cache: gikk → gå, husene → hus, bøker → bøk and bok, barna → barn, større → stor; a made-up word stayed "not found". In the browser: Delete selected, Delete all matching with a search and status filter, Recheck all not found.
+
 ## v5.7.1 — 2026-11-26
 
 - Fixed every remaining word failing with "Target page, context or browser has been closed" after the browser closed mid-run (computer sleep, Chromium crash). The browser and Playwright's driver are now restarted automatically, with `WARN  browser: closed unexpectedly; restarting it` in the log; after 5 restarts in one run, browser sources are skipped with a clear message.

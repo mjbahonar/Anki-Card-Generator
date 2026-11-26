@@ -226,7 +226,13 @@ To check a word again: `python main.py --refresh-word WORD [--source SOURCE]` de
 
 ### Database page in the GUI
 
-The **Database** page of `python main.py --gui` shows the cache file size, number of words and results, "not found" results, stored audio/media and text per dictionary. Search words (with dictionary and found/not-found filters), open a result to see its saved card content, settings and media, **Fetch again** (runs `--refresh-word` for that dictionary) or **Delete** it. Maintenance: **Compact file** (`VACUUM`), **Recheck not found** per dictionary and **Clear cache** for a whole dictionary. Changes that write to the database wait while a run is in progress. Deleting a result keeps the audio and image files in your folders.
+The **Database** page of `python main.py --gui` shows the cache file size, number of words and results, "not found" results, stored audio/media and text per dictionary. Search words (with dictionary and found/not-found filters), open a result to see its saved card content, settings and media, **Fetch again** (runs `--refresh-word` for that dictionary) or **Delete** it. Select results with the checkboxes and **Delete selected**, or **Delete all matching** to remove everything the current search and filters match (also rows not loaded yet). Maintenance: **Compact file** (`VACUUM`), **Recheck all not found** or per dictionary, and **Clear cache** for a whole dictionary. Changes that write to the database wait while a run is in progress. Deleting a result keeps the audio and image files in your folders.
+
+### Inflected forms in Lexin
+
+When Lexin has no exact headword for the input (for example *gikk*, *husene*, *bøker*, *større*), the first `sources.lexin.form_entries` results (default 3; `0` = off) are checked for the input in their inflection table. Matching entries are used with a short note above them, such as `gikk → gå`; when several base words fit (*bøker*: *bøk* and *bok*), all are shown. Related results that only mention the form in an example are not matched. The Lexin headword recording says the base word, so for an inflected form the card's pronunciation comes from the next provider in `[audio.word]` (for example Google TTS saying *gikk*). An exact headword always wins.
+
+"Not found" results saved before form checking existed, or with a different `form_entries`, are checked again automatically; found results are kept, so changing this setting does not refetch the whole cache.
 
 ### Exact Lexin matching
 

@@ -407,3 +407,6 @@
         display: none;
     }
 }
+
+/* Lexin entry found through an inflected form ("gikk → gå"). */
+.lexin-form-note { font-size: .9em; opacity: .75; margin: 0 0 .4em; }

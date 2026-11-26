@@ -1,6 +1,7 @@
 """Exact Bokmål/Nynorsk entries and their headword pronunciation from Lexin."""
 
 import hashlib
+import html
 import os
 from pathlib import Path
 import re
@@ -20,6 +21,30 @@ def audio_filename(word, provider, language='no'):
     stem = re.sub(r'[^\w-]', '_', str(word), flags=re.UNICODE).strip('_')[:80] or 'word'
     digest = hashlib.sha256(str(word).encode('utf-8')).hexdigest()[:10]
     return f"{provider}_{language}_{stem}_{digest}.mp3"
+
+
+FORM_PREFIXES = ('ei/en ', 'å ', 'har ', 'en ', 'ei ', 'et ', 'mer ', 'mest ')
+
+
+def inflected_forms(entry_html):
+    """Normalized word forms in an entry's inflection tables (articles, "å", "har" and "!" removed)."""
+    soup = BeautifulSoup(entry_html, 'html.parser')
+    forms = set()
+    for span in soup.select('.ordbank-table td > div > span, .ordbank-table td > span'):
+        text = span.get_text(' ', strip=True).rstrip('!').strip()
+        for prefix in FORM_PREFIXES:
+            if text.startswith(prefix):
+                text = text[len(prefix):]
+                break
+        if text and text != '—':
+            forms.add(normalize_headword(text))
+    return forms
+
+
+def form_note(word, base):
+    """Short line above an entry found through an inflected form, e.g. "gikk → gå"."""
+    return ('<div class="lexin-form-note">' + html.escape(str(word)) + ' → <b>' + html.escape(base)
+            + '</b></div>')
 
 
 def render_lexin_entry(entry_html, variant='bokmal', table_sounds=None):
@@ -152,11 +177,13 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                              audio_directory=None, copy_to=None, timeout_seconds=20,
                              verbose=True, on_error=None, remaining_timeout=None, variant='bokmal',
                              table_audio=False, on_table_media=None, audio_cache=True, table_fallback=None, on_entry=None,
-                             table_cached_fallback=None, max_entries=2, on_not_found=None):
+                             table_cached_fallback=None, max_entries=2, on_not_found=None, form_entries=0):
     """Inspect only the first max_entries results; return exact matches and one headword sound.
 
+    Without an exact headword, the first form_entries results are checked for the typed word in
+    their inflection tables (an inflected form); those entries are returned with a short note.
     on_not_found() is called only when Lexin answered and the word is definitely absent:
-    the page says "Ingen treff" or none of the inspected results is an exact headword match.
+    the page says "Ingen treff" or no inspected result matches as a headword or form.
     Timeouts and other failures go to on_error instead."""
     def log(message):
         if verbose:
@@ -186,27 +213,45 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
         audio_attempted = False
         table_native_state = {'unavailable': False}
         entries = page.locator('ul.search-table')
+        wanted = normalize_headword(str(word))
+        # Exact headwords first; only without one, entries whose inflection table holds the typed
+        # form (gikk -> gå, husene -> hus). Lexin lists the base word among the first results.
+        exact = []
         for index in range(min(max_entries, entries.count())):
-            page.set_default_timeout(timeout_ms())
-            entry = entries.nth(index)
-            lemmas = entry.locator(lemma_selector)
+            lemmas = entries.nth(index).locator(lemma_selector)
             if not lemmas.count():
                 continue
-            lemma = lemmas.first
+            forms = lemmas.first.locator('.grunnform')
+            texts = forms.all_text_contents() if forms.count() else [lemmas.first.inner_text()]
+            if any(normalize_headword(text) == wanted for text in texts):
+                exact.append(index)
+        matches = [(index, None) for index in exact]
+        if not matches and form_entries:
+            for index in range(min(form_entries, entries.count())):
+                entry = entries.nth(index)
+                lemmas = entry.locator(lemma_selector)
+                if lemmas.count() and wanted in inflected_forms(entry.inner_html()):
+                    grunnform = lemmas.first.locator('.grunnform')
+                    base = (grunnform.first.inner_text() if grunnform.count() else lemmas.first.inner_text()).strip()
+                    matches.append((index, base))
+            if matches:
+                log(f'[LEXIN] {word!r} is an inflected form of ' + ', '.join(sorted({b for _, b in matches})))
+        for index, base in matches:
+            page.set_default_timeout(timeout_ms())
+            entry = entries.nth(index)
+            lemma = entry.locator(lemma_selector).first
             forms = lemma.locator('.grunnform')
-            texts = forms.all_text_contents() if forms.count() else [lemma.inner_text()]
-            if not any(normalize_headword(text) == normalize_headword(str(word)) for text in texts):
-                continue
             markup = entry.inner_html()
             rendered = render_lexin_entry(markup, variant)
             if rendered in seen_entries:
                 continue
             seen_entries.add(rendered)
             # Keep valid text even if audio subsequently fails.
-            contents.append(rendered)
+            contents.append(form_note(word, base) + rendered if base else rendered)
             if on_entry:
                 on_entry('<ul class="search-table">' + markup + '</ul>')
-            if download_audio and not audio_attempted:
+            # The headword recording says the base word, not the typed form; other providers say the form.
+            if download_audio and not audio_attempted and base is None:
                 audio_attempted = True
                 button = lemma.locator('.tts-btn').first
                 for form_index in range(forms.count()):
@@ -228,9 +273,10 @@ def scrape_and_process_lexin(word, word_number, page, *, download_audio=True,
                                               'nn' if variant == 'nynorsk' else 'no', timeout_ms,
                                               on_error, on_table_media, audio_cache, table_fallback,
                                               cached_fallback=table_cached_fallback, native_state=table_native_state)
-                contents[-1] = render_lexin_entry(entry.inner_html(), variant, sounds)
+                rendered = render_lexin_entry(entry.inner_html(), variant, sounds)
+                contents[-1] = form_note(word, base) + rendered if base else rendered
         if not contents:
-            log(f'[LEXIN] No exact headword for {word!r}')
+            log(f'[LEXIN] No exact headword or inflected form for {word!r}')
             if on_not_found:
                 on_not_found()
     except Exception as exc:

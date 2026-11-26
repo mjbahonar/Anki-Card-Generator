@@ -245,7 +245,10 @@ dialog::backdrop { background: rgba(10, 12, 25, .45); backdrop-filter: blur(2px)
 .db-filters input { flex: 1; min-width: 200px; }
 .db-filters select { width: auto; }
 .db-rows { display: grid; gap: 6px; padding-bottom: 14px; }
-.db-row { display: grid; grid-template-columns: minmax(120px, 1.3fr) minmax(90px, .8fr) auto minmax(120px, 1.4fr) auto;
+.db-bulk { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+.db-select-all { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.db-row input[type="checkbox"], .db-select-all input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.db-row { display: grid; grid-template-columns: auto minmax(120px, 1.3fr) minmax(90px, .8fr) auto minmax(120px, 1.4fr) auto;
   align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
 .db-row.open { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .db-word { border: 0; background: none; text-align: start; font-weight: 620; cursor: pointer; padding: 0; color: var(--text); }
