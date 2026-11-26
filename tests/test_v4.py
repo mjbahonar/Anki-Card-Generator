@@ -572,7 +572,7 @@ class V4Tests(unittest.TestCase):
     def test_normal_card_audio_runs_inside_the_source_time_budget(self):
         self.config.section('output')['formats'] = ['json']
         deadlines = []
-        def audio(word, number, context):
+        def audio(word, number, context, **kwargs):
             deadlines.append(context.source_deadline)
             return ''
         with patch('main.dictionary_content', return_value='<div>x</div>'), \

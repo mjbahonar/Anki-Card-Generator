@@ -130,6 +130,7 @@ title = ""                    # Blank keeps the original front appearance
 instruction = ""
 tag = "normal"
 audio = true
+show_markers = true           # false shows only the word: "skål" for "en skål!", "kjøpe" for "å kjøpe"
 
 [cards.type]                   # Meaning/prompt -> typed answer; Answer REQUIRED
 title = "Spelling practice"

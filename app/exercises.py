@@ -85,12 +85,13 @@ def validate_cards(data):
     if not isinstance(cards, dict) or set(cards) - set(KINDS):
         raise ConfigError('cards supports normal, type, sentence, gap, listen')
     for kind, settings in cards.items():
-        if not isinstance(settings, dict) or set(settings) - {'title', 'instruction', 'audio', 'tag'}:
+        allowed = {'title', 'instruction', 'audio', 'tag'} | ({'show_markers'} if kind == 'normal' else set())
+        if not isinstance(settings, dict) or set(settings) - allowed:
             raise ConfigError(f'Invalid cards.{kind} setting')
         for key, value in settings.items():
-            if key == 'audio':
+            if key in ('audio', 'show_markers'):
                 if type(value) is not bool:
-                    raise ConfigError(f'cards.{kind}.audio must be true or false')
+                    raise ConfigError(f'cards.{kind}.{key} must be true or false')
             elif not isinstance(value, str) or (key not in ('instruction', 'title') and not value.strip()):
                 raise ConfigError(f'cards.{kind}.{key} must be text')
         if 'tag' in settings and re.search(r'[\s,]', settings['tag']):

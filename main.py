@@ -91,6 +91,14 @@ def export_outputs(rows, config, stem, context, recovery=False):
     return paths, failures
 
 
+def front_word(word, config):
+    """The word as shown on a vocabulary card: as written, or without å/en/ei/et and a final "!"."""
+    if options(config, 'normal').get('show_markers', True):
+        return word
+    from app.lexin_scraper import split_lookup
+    return split_lookup(word, config.section('language')['source'])[0]
+
+
 def output_stem(config, now=None):
     """Input workbook name first, then the prefix and timestamp."""
     import re
@@ -195,7 +203,8 @@ def run(config, context_factory=SourceContext):
                 previous = len(context.errors)
                 try:
                     with context.source_budget():
-                        row['Sound'] = select_audio(word, number, context) if options(config, 'normal')['audio'] else ''
+                        row['Sound'] = (select_audio(word, number, context, spoken=front_word(word, config))
+                                        if options(config, 'normal')['audio'] else '')
                 except Exception as exc:
                     context.issue(word, 'audio', exc)
                     row['Sound'] = ''
@@ -204,7 +213,7 @@ def run(config, context_factory=SourceContext):
                 report.audio(row['Sound'])
                 for error in context.errors[previous:]:
                     print(f'  WARN  {error["source"]}: {concise(error["message"])}', flush=True)
-                row['FrontField'] = f'<span dir="{direction(config.section("language")["source"])}">' + html.escape(word) + '</span>' + (' ' + row['Sound'] if row['Sound'] else '')
+                row['FrontField'] = f'<span dir="{direction(config.section("language")["source"])}">' + html.escape(front_word(word, config)) + '</span>' + (' ' + row['Sound'] if row['Sound'] else '')
                 normal_options = options(config, 'normal')
                 if normal_options['title'] or normal_options['instruction']:
                     qlang, alang = language_settings(config)

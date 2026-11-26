@@ -147,6 +147,7 @@ STRINGS = {
         'help.input.word_column': 'Column header name (needs "First row is a header") or its position: 0 = first column.',
         'field.sources.lexin.form_entries': 'Results checked for inflected forms',
         'field.sources.lexin.entries': 'Results checked for the exact word',
+        'field.cards.normal.show_markers': 'Show å / en / ei / et on the card',
         'file.browse': 'Browse…',
         'file.refresh': 'Refresh the file list and check the file again',
         'file.found': '✓ File found',

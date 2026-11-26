@@ -1,5 +1,12 @@
 # Release notes
 
+## v5.10.0 — 2026-11-26
+
+- Words written with `å`, `en`, `ei`, `et` or a final `!` are looked up without them in every dictionary. In Lexin the marker selects the entry: `å` keeps verbs, `en`/`ei`/`et` keep nouns (preferring that gender), so `en skål` is the bowl, not *skål!*. After `å`, an a-infinitive is tried with -e (`å kjøpa` → *kjøpe*, indirect) instead of the noun form *kjøpa*. Previously such words got unrelated Lexin results rejected and were saved as "not found".
+- Added `[cards.normal] show_markers` (default `true`): `false` shows only the word on the card front (`skål` for `en skål!`); text-to-speech then says the same. Note identity is unchanged.
+- Compatibility: backward-compatible minor release. `show_markers` is optional (default `true`, the previous display); the database structure, Anki fields, note GUIDs and `app.api` are unchanged. Words written with a marker get a separate Lexin cache entry (bare word plus word class), so they are looked up once; plain words keep their cached results. `select_audio` has an optional `spoken` argument.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check`, `git diff --check` and the flash-cards tests. Live on a copy of a real cache: en skål (bowl only, not the interjection), skål! (both), ei jul, et spøkelse, et hus, ei bok, en bok, å lese (verbs only), å kjøpa / å kasta / å snakka (→ kjøpe / kaste / snakke, indirect); with `show_markers = false` the fronts showed the bare words and text-to-speech said them. Known limitation: an expression such as *en gang* ("once") is read as the noun *gang*.
+
 ## v5.9.1 — 2026-11-26
 
 - Fixed every Lexin word being fetched and saved again after `sources.lexin.form_entries` was added to `config.toml` (5.8.0–5.9.0 put it in the cache key, contrary to the 5.8.0 notes). It no longer affects the key of found results; it only decides when a saved "not found" is checked again. Results saved by 5.8.0–5.9.0 are reused, so nothing is fetched twice.

@@ -180,13 +180,15 @@ class SourceContext:
                               else str(exc)))
                 self.issue(self.cache_capture['word'], 'dictionary_media', message)
 
-    def cache_result(self, name, word, loader, audio=False):
+    def cache_result(self, name, word, loader, audio=False, word_class=None, alias=None):
+        """word is what is looked up; alias is the text as written (e.g. "en skål") for audio bookkeeping."""
         from app.dictionary_cache import cache_key
         self.last_cache_hit = False
         self.last_not_found = False
         if self.dictionary_cache is None:
             return loader()
-        key = cache_key(name, word, self.config, audio)
+        key = cache_key(name, word, self.config, audio, word_class)
+        written = alias or word
         try:
             cached = (None if self.config.data.get('dictionary_cache', {}).get('refresh', False)
                       else self.dictionary_cache.get(key, self))
@@ -218,9 +220,9 @@ class SourceContext:
             content, sound, documents = cached
             self.last_not_found = not content
             if name == 'lexin':
-                self.lexin_results[word] = (content, sound)
+                self.lexin_results[written] = (content, sound)
                 if audio:
-                    self.lexin_audio_attempted.add(word)
+                    self.lexin_audio_attempted.add(written)
             self.last_cache_hit = True
             return content
         previous = self.cache_capture
@@ -243,7 +245,7 @@ class SourceContext:
             # Optional archive failures must not discard valid card text/audio.
             # Incomplete dictionary/card fetches still retain the old good result.
             if content and not any(e['source'] not in ('media_copy', 'dictionary_media') for e in self.errors[errors:]):
-                sound = self.lexin_results.get(word, ('', ''))[1] if name == 'lexin' else ''
+                sound = self.lexin_results.get(written, ('', ''))[1] if name == 'lexin' else ''
                 media = [(p, 'audio' if p.suffix.lower() == '.mp3' else 'image') for p in capture['media']]
                 media.extend((p, 'archive') for p in capture['archive'])
                 try:
@@ -440,12 +442,36 @@ class SourceContext:
         return cached_exercise_audio(form, language, self)
 
     def lexin(self, word, number, audio=False):
-        return self.cache_result('lexin', word, lambda: self._lexin(word, number, audio), audio)
+        """Lexin result for the text as written; "å", "en/ei/et" and a final "!" only guide the lookup."""
+        from app.lexin_scraper import split_lookup
+        lookup, word_class = split_lookup(word, self.language)
+        return self.cache_result('lexin', lookup, lambda: self._lexin(lookup, number, audio, word_class, word),
+                                 audio, word_class=word_class, alias=word)
 
-    def _lexin(self, word, number, audio=False):
+    def _lexin(self, word, number, audio=False, word_class=None, written=None):
+        written = written or word
         if audio:
-            self.lexin_audio_attempted.add(word)
+            self.lexin_audio_attempted.add(written)
         cached = self.cached_audio(word, 'lexin') if audio else ''
+        content, sound, definite = self._lexin_scrape(word, number, audio, cached, word_class, written)
+        if not content and definite and word_class == 'verb' and len(word) > 2 and word.endswith('a'):
+            # "å kjøpa": an a-infinitive. Lexin's bokmål has the e-infinitive, so try "kjøpe" as a verb.
+            e_form = word[:-1] + 'e'
+            content, sound, definite = self._lexin_scrape(e_form, number, audio, cached, word_class, written)
+            if content:
+                from app.lexin_scraper import form_note
+                content = form_note(word, e_form) + content
+                sound = ''  # The recording says the e-infinitive, not what was written.
+        if sound:
+            sound = self.register_audio(self.audio_dir / sound[7:-1])
+        self.lexin_results[written] = (content, cached or sound)
+        if not content and definite:
+            self.definitely_absent = True  # Every selected Lexin variant answered "not there".
+            self.absent_details = {'form_entries': lexin_form_entries(self.config)}
+        return content
+
+    def _lexin_scrape(self, word, number, audio, cached, word_class, written):
+        """One Lexin search per selected variant; returns (content, sound tag, every variant said "not there")."""
         variant = self.config.section('sources').get('lexin', {}).get(
             'variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
         variants = ('bokmal', 'nynorsk') if variant == 'both' else (variant,)
@@ -456,7 +482,7 @@ class SourceContext:
                 content, selected_sound = scrape_and_process_lexin(
                     word, number, page, download_audio=audio and selected == primary and not bool(cached),
                     audio_directory=self.audio_dir, copy_to='', timeout_seconds=self.timeout,
-                    verbose=False, on_error=lambda source, error: self.issue(word, source, error),
+                    verbose=False, on_error=lambda source, error: self.issue(written, source, error),
                     remaining_timeout=lambda: self.timeout, variant=selected,
                     table_audio=(self.config.section('audio')['enabled'] and
                                  self.config.data.get('cards', {}).get('normal', {}).get('audio', True) and
@@ -467,18 +493,12 @@ class SourceContext:
                     table_cached_fallback=self.cached_table_audio_fallback,
                     on_entry=lambda markup: self.capture_entry(markup, page.url),
                     max_entries=self.config.section('sources').get('lexin', {}).get('entries', 2),
-                    form_entries=lexin_form_entries(self.config),
+                    form_entries=lexin_form_entries(self.config), word_class=word_class,
                     on_not_found=lambda selected=selected: absent.append(selected))
             contents.append(content)
             sound = selected_sound or sound
         content = ''.join(contents)
-        if sound:
-            sound = self.register_audio(self.audio_dir / sound[7:-1])
-        self.lexin_results[word] = (content, cached or sound)
-        if not content and len(absent) == len(variants):
-            self.definitely_absent = True  # Every selected Lexin variant answered "not there".
-            self.absent_details = {'form_entries': lexin_form_entries(self.config)}
-        return content
+        return content, sound, not content and len(absent) == len(variants)
 
     def close(self):
         try:
@@ -514,6 +534,8 @@ def lexin_absence_current(documents, config):
 def dictionary_content(name, word, number, ctx):
     if name == 'lexin':
         return _dictionary_content(name, word, number, ctx)
+    from app.lexin_scraper import split_lookup
+    word = split_lookup(word, getattr(ctx, 'language', None))[0]  # "en skål!" -> "skål" for every dictionary.
     if isinstance(ctx, SourceContext):
         content = ctx.cache_result(name, word, lambda: _dictionary_content(name, word, number, ctx))
     else:
@@ -682,7 +704,10 @@ def word_audio_priority(config):
     return audio['priority']
 
 
-def select_audio(word, number, ctx):
+def select_audio(word, number, ctx, spoken=None):
+    """Headword audio for word (as written). spoken is what text-to-speech and Fastdic say when it
+    differs, e.g. "skål" for "en skål!" when the card hides markers; Lexin still uses word."""
+    spoken = spoken or word
     if not ctx.config.section('audio')['enabled']:
         return ''
     for provider in word_audio_priority(ctx.config):
@@ -693,7 +718,7 @@ def select_audio(word, number, ctx):
         cache_provider = ('fastdic_' + ctx.config.section('audio')['english_accent'] if provider == 'fastdic'
                           else provider)
         try:
-            cached = ctx.cached_audio(word, cache_provider)
+            cached = ctx.cached_audio(word if provider == 'lexin' else spoken, cache_provider)
             if cached:
                 return cached
             if provider == 'lexin':
@@ -706,19 +731,19 @@ def select_audio(word, number, ctx):
                     raise ValueError('No headword pronunciation available')
                 return sound
             if provider == 'fastdic':
-                soup = BeautifulSoup(ctx.fetch('https://fastdic.com/word/' + quote(word, safe='')).text, 'html.parser')
+                soup = BeautifulSoup(ctx.fetch('https://fastdic.com/word/' + quote(spoken, safe='')).text, 'html.parser')
                 accent = ctx.config.section('audio')['english_accent']
                 span = soup.select_one(f'span.audio.js-audio[data-type="{accent}"]')
                 if not span or not span.get('data-src'):
                     raise ValueError('Pronunciation not found')
                 url = f'https://cdn.fastdic.com/c-en-audios/{accent}/mp3/{span["data-src"]}.mp3'
-                return ctx.save_audio(word, cache_provider, ctx.fetch(url).content)
+                return ctx.save_audio(spoken, cache_provider, ctx.fetch(url).content)
             if provider == 'google_tts':
                 from gtts import gTTS
                 buffer = BytesIO()
                 language = ctx.audio_language('google_tts')
-                gTTS(text=word, lang=language, timeout=ctx.timeout).write_to_fp(buffer)
-                return ctx.save_audio(word, cache_provider, buffer.getvalue())
+                gTTS(text=spoken, lang=language, timeout=ctx.timeout).write_to_fp(buffer)
+                return ctx.save_audio(spoken, cache_provider, buffer.getvalue())
         except Exception as exc:
             ctx.issue(word, provider + '_audio', exc)
     return ''
