@@ -17,6 +17,7 @@ import signal
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tomllib
@@ -42,6 +43,7 @@ class Job:
         self.returncode = None
         self.progress = None
         self.stopping = False
+        self.stop_file = None
         self.started = time.time()
 
     def read(self):
@@ -54,6 +56,8 @@ class Job:
             if len(self.lines) > MAX_LINES:
                 del self.lines[:1000]
         self.returncode = self.process.wait()
+        if self.stop_file is not None:
+            self.stop_file.unlink(missing_ok=True)
 
     @property
     def running(self):
@@ -75,13 +79,17 @@ class GuiApp:
             if self.job and self.job.running:
                 raise RuntimeError('busy')
             command = [sys.executable, '-u', str(self.launcher), '--config', str(self.config_path), *extra]
-            env = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1')
+            # Stop creates this file; main.py finishes the current step, saves and exits (see StopRequest).
+            stop_file = Path(tempfile.gettempdir()) / f'anki-card-generator-stop-{self.token[:12]}-{time.time_ns()}'
+            env = dict(os.environ, PYTHONUTF8='1', PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1',
+                       ANKI_CARD_GENERATOR_STOP_FILE=str(stop_file))
             flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
             process = subprocess.Popen(command, cwd=self.launcher.parent, stdin=subprocess.DEVNULL,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                        encoding='utf-8', errors='replace', env=env, creationflags=flags,
                                        start_new_session=os.name != 'nt')
             self.job = Job(kind, process)
+            self.job.stop_file = stop_file
             threading.Thread(target=self.job.read, daemon=True).start()
             return self.job
 
@@ -93,8 +101,12 @@ class GuiApp:
             job.process.kill()
             return True
         job.stopping = True
-        # Same as Ctrl+C in a terminal: main.py saves finished and partial words.
-        job.process.send_signal(signal.CTRL_BREAK_EVENT if os.name == 'nt' else signal.SIGINT)
+        if job.stop_file is not None:
+            # A file, not a console signal: a signal would also reach the browser and could hang the run.
+            job.stop_file.write_text('stop', encoding='utf-8')
+        else:
+            # Jobs started without a stop file (for example by projects that subclass GuiApp): Ctrl+Break / SIGINT.
+            job.process.send_signal(signal.CTRL_BREAK_EVENT if os.name == 'nt' else signal.SIGINT)
         return True
 
     def job_state(self, since=0):

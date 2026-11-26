@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from datetime import datetime
 import html
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -91,6 +92,53 @@ def export_outputs(rows, config, stem, context, recovery=False):
     return paths, failures
 
 
+STOP_FILE_ENV = 'ANKI_CARD_GENERATOR_STOP_FILE'
+
+
+class StopRequest:
+    """Stop a run between steps. Ctrl+C / Ctrl+Break, or the settings GUI's stop file, only set a
+    flag; the run checks it before each word, dictionary and audio lookup. Interrupting a browser
+    call in the middle can leave Playwright waiting forever, so nothing is cut off mid-call. A second
+    Ctrl+C stops at once."""
+
+    def __init__(self):
+        self.requested = False
+        path = os.environ.get(STOP_FILE_ENV)
+        self.file = Path(path) if path else None
+        self.previous = {}
+
+    def __enter__(self):
+        for name in ('SIGINT', 'SIGBREAK'):
+            number = getattr(signal, name, None)
+            if number is not None:
+                try:
+                    self.previous[number] = signal.signal(number, self.handle)
+                except ValueError:  # Not the main thread (tests): the flag and stop file still work.
+                    pass
+        return self
+
+    def __exit__(self, *exc_info):
+        for number, handler in self.previous.items():
+            signal.signal(number, handler)
+        return False
+
+    def handle(self, signum, frame):
+        if self.requested:
+            raise KeyboardInterrupt  # Second press: stop now.
+        self.request()
+
+    def request(self):
+        if not self.requested:
+            self.requested = True
+            print('\nStop requested: finishing the current step, then saving finished words...', flush=True)
+
+    def check(self):
+        if not self.requested and self.file is not None and self.file.exists():
+            self.request()
+        if self.requested:
+            raise KeyboardInterrupt
+
+
 def front_word(word, config):
     """The word as shown on a vocabulary card: as written, or without å/en/ei/et and a final "!"."""
     if options(config, 'normal').get('show_markers', True):
@@ -135,8 +183,9 @@ def run(config, context_factory=SourceContext):
     interrupted = False
     fatal = False
     try:
-        with keep_awake:
+        with keep_awake, StopRequest() as stop:
             for number, record in enumerate(records, 1):
+                stop.check()
                 word = record['Words']
                 print(f'\n[{number}/{len(words)}] {word}', flush=True)
                 report.word(number, word, record['Kind'])
@@ -172,6 +221,7 @@ def run(config, context_factory=SourceContext):
                     continue
                 rows.append(row)
                 for name in active:
+                    stop.check()
                     started = time.monotonic()
                     previous = len(context.errors)
                     context.definitely_absent = False
@@ -200,6 +250,7 @@ def run(config, context_factory=SourceContext):
                         context.issue(word, name, exc)
                         row[name] = ''
                         report.source(name, 'FAIL', started, context.errors[-1]['message'])
+                stop.check()
                 previous = len(context.errors)
                 try:
                     with context.source_budget():
@@ -228,7 +279,7 @@ def run(config, context_factory=SourceContext):
                     time.sleep(config.section('runtime')['word_delay_seconds'])
     except KeyboardInterrupt:
         interrupted = True
-        print('Interrupted; saving completed and partial words.', flush=True)
+        print('Stopped; saving completed and partial words.', flush=True)
     except Exception as exc:
         fatal = True
         context.issue('', 'runtime', exc)

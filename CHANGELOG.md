@@ -1,5 +1,11 @@
 # Release notes
 
+## v5.11.2 — 2026-11-26
+
+- Fixed Stop (and Ctrl+C) hanging when pressed while Lexin was loading a page, so nothing was saved and a second Stop ended the run with exit code 1. Stop now asks the run to finish its current step: it is checked before each word, dictionary and audio lookup, then finished words are saved as a `_partial` file. The GUI uses a stop file instead of a console signal, so the browser is not interrupted; jobs started without a stop file (projects that subclass `GuiApp`, such as flash-cards) still get Ctrl+Break. A second press still stops at once.
+- Compatibility: patch release. No configuration, CLI options, cache, Anki or `app.api` changes. The run log now says "Stopped; saving completed and partial words." (was "Interrupted; ...").
+- Validation: full automated test suite on a clean copy of this commit (new tests for the stop flag, the stop file, a run stopped between words, the GUI's two-press Stop and the signal fallback), `python main.py --check`, `git diff --check` and the flash-cards tests. Reproduced live on a copy of a real cache: Stop while Lexin was loading a page hung for over two minutes before the fix; afterwards both the GUI stop file and Ctrl+Break saved all partial outputs (including the report) in about 3 seconds.
+
 ## v5.11.1 — 2026-11-26
 
 - `å`, `en`, `ei`, `et` and a final `!` no longer filter Lexin meanings: they are only removed before the lookup, so a card shows every meaning (`en skål`: the bowl and the toast) and never suggests a word is only a noun or only a verb. `å lese` now reuses the cached result of `lese`. After `å`, an a-infinitive shows its own results and the e-infinitive verb (`å kjøpa`: *kjøp* and *kjøpe*). Results saved by 5.10.0–5.11.0 for marked words (filtered by word class) are not reused; those words are looked up once more.
