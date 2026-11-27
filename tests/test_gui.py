@@ -225,6 +225,7 @@ class DatabaseEndpointTests(ServerTests):
         self.assertEqual([r['word'] for r in found['rows']], ['hus'])
         self.assertEqual(self.request('GET', '/api/db/search?status=bogus')[0], 400)
         self.assertEqual(json.loads(self.request('GET', '/api/db/entry?key=k1')[1])['content'], '<p>house</p>')
+        self.assertEqual(json.loads(self.request('GET', '/api/db/forms?q=hus')[1])['key'], 'hus')
         self.assertEqual(self.request('GET', '/api/db/entry?key=nope')[0], 404)
         self.app.job = Mock(running=True)
         self.assertEqual(self.request('POST', '/api/db/delete', {'keys': ['k1']})[0], 409)

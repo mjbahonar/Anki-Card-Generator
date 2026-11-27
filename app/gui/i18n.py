@@ -201,8 +201,24 @@ STRINGS = {
         'db.indirect': 'Indirect',
         'db.indirect_sub': 'Found through an inflected form',
         'db.indirect_of': 'Indirect → {base}',
+        'db.entries': 'Stored entries',
+        'db.entries_sub': 'Each Lexin meaning once, compressed',
+        'db.forms': 'Word forms',
+        'db.forms_sub': 'Answered offline when looked up',
+        'forms.title': 'Word forms',
+        'forms.placeholder': 'Type a word or form, e.g. gikk',
+        'forms.help': 'Shows which saved entries a word belongs to: the base word of an inflected form, or all forms of a base word.',
+        'forms.is_headword': 'Base word ({variant})',
+        'forms.is_form': 'Inflected form of',
+        'forms.meanings': '{count} saved entries',
+        'forms.unknown': '"{word}" is not in the saved entries yet. It is looked up in Lexin the first time it is needed.',
+        'forms.headword_wins': 'Because it is a base word itself, it is always looked up as its own word.',
+        'forms.variant_bokmal': 'Bokmål',
+        'forms.variant_nynorsk': 'Nynorsk',
         'db.offline': 'Offline (from saved entries)',
         'db.offline_of': 'Offline → {base}',
+        'db.missed_help': 'Lexin was asked and had no match; the saved entries know this as an inflected form, '
+                          'so it was built from them.',
         'db.offline_help': 'Built from entries already in the database, without asking Lexin. It can miss a meaning '
                            'whose entry was never saved; use Fetch again (or filter and Delete all matching) to ask Lexin.',
         'db.indirect_help': 'Indirect translation: the word is an inflected form; the meaning is the base word\'s entry.',
@@ -225,6 +241,11 @@ STRINGS = {
                               'before 5.12.0; new results are stored this way automatically.',
         'cache.upgrade_confirm': 'Back up the database and move saved Lexin results into the shared, compressed '
                                  'entry store? This can take a few minutes for a large database.',
+        'cache.offline_title': 'Offline answers',
+        'cache.offline_refresh': 'Fetch all offline answers again',
+        'cache.offline_desc': 'Asks Lexin again for every answer that was built offline from saved entries, so missing '
+                              'meanings are added. About 3 seconds per word; Stop keeps the rest for later.',
+        'cache.offline_confirm': 'Look up every offline answer again in Lexin? This needs internet and can take a while.',
         'cache.confirm': 'Delete all cached results for {source}? They are fetched again the next time this dictionary is used.',
 
         'action.save': 'Save',

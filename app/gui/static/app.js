@@ -522,7 +522,7 @@ function renderDatabase() {
   const wrap = el('div', { class: 'db' });
   const statsCard = el('div', { class: 'card' }, el('div', { class: 'card-body db-loading', text: t('db.loading') }));
   const searchCard = el('div', { class: 'card' });
-  wrap.append(statsCard, searchCard, renderCacheTools());
+  wrap.append(statsCard, renderFormLookup(), searchCard, renderCacheTools());
   loadStats(statsCard);
   renderSearch(searchCard, true);
   return wrap;
@@ -561,6 +561,8 @@ async function loadStats(card) {
         tile(t('db.words'), String(stats.words), t('db.results_n', { count: stats.results })),
         tile(t('db.indirect'), String(stats.indirect || 0), t('db.indirect_sub')),
         tile(t('db.not_found'), String(stats.not_found), t('db.not_found_sub')),
+        tile(t('db.entries'), String(stats.entries || 0), t('db.entries_sub')),
+        tile(t('db.forms'), String(stats.forms || 0), t('db.forms_sub')),
         tile(t('db.audio'), String(audio.files), formatBytes(audio.bytes)),
         tile(t('db.media'), formatBytes(stats.media_bytes), stats.media.map((m) => `${m.kind}: ${m.files}`).join(' · ')),
         tile(t('db.text'), formatBytes(stats.text_bytes), stats.oldest ? t('db.since', { date: '⁦' + stats.oldest.slice(0, 10) + '⁩' }) : '')),
@@ -570,6 +572,40 @@ async function loadStats(card) {
   if (filter && filter.options.length <= 1) {
     filter.append(...db.sources.map((s) => el('option', { value: s, text: sourceName(s), selected: s === db.source })));
   }
+}
+
+function renderFormLookup() {
+  const input = el('input', { type: 'search', placeholder: t('forms.placeholder'), 'aria-label': t('forms.title') });
+  const out = el('div', { class: 'forms-result' }, el('span', { class: 'hint', text: t('forms.help') }));
+  const variantName = (v) => t('forms.variant_' + v, {}, v);
+  const chip = (text) => el('span', { class: 'form-chip', text });
+  const show = async () => {
+    const q = input.value.trim();
+    if (!q) { out.replaceChildren(el('span', { class: 'hint', text: t('forms.help') })); return; }
+    let info;
+    try { info = await api('GET', '/api/db/forms?q=' + encodeURIComponent(q)); } catch (e) { out.textContent = e.error; return; }
+    const parts = [];
+    for (const h of info.headword) {
+      parts.push(el('div', { class: 'forms-line' },
+        el('span', { class: 'badge ok', text: t('forms.is_headword', { variant: variantName(h.variant) }) }),
+        el('span', { class: 'hint', text: t('forms.meanings', { count: h.entries }) })),
+        el('div', { class: 'form-chips' }, h.forms.map(chip)));
+    }
+    if (info.bases.length) {
+      parts.push(el('div', { class: 'forms-line' },
+        el('span', { class: 'badge info', text: t('forms.is_form') }),
+        info.bases.map((b) => el('span', { class: 'form-base' }, el('b', { text: b.headword }),
+          el('span', { class: 'hint', text: ` ${variantName(b.variant)} · ${t('forms.meanings', { count: b.entries })}` })))));
+      if (info.headword.length) parts.push(el('div', { class: 'hint', text: t('forms.headword_wins') }));
+    }
+    if (!parts.length) parts.push(el('span', { class: 'hint', text: t('forms.unknown', { word: q }) }));
+    out.replaceChildren(...parts);
+  };
+  let timer = null;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(show, 300); });
+  return el('div', { class: 'card' },
+    el('div', { class: 'card-head' }, el('h2', { text: t('forms.title') })),
+    el('div', { class: 'card-body forms-body' }, input, out));
 }
 
 async function renderSearch(card, reset) {
@@ -648,7 +684,7 @@ function renderDbRow(row) {
     } }),
     el('span', { class: 'db-source', text: sourceName(row.source) }),
     el('span', { class: 'badge ' + (row.not_found ? 'warn' : row.indirect.length ? 'info' : 'ok'),
-      title: row.offline ? t('db.offline_help') : row.indirect.length ? t('db.indirect_help') : '',
+      title: row.lexin_missed ? t('db.missed_help') : row.offline ? t('db.offline_help') : row.indirect.length ? t('db.indirect_help') : '',
       text: row.not_found ? t('db.not_found') : row.indirect.length
         ? t(row.offline ? 'db.offline_of' : 'db.indirect_of', { base: row.indirect.join(', ') }) : t('db.found') }),
     el('span', { class: 'db-meta' }, [formatBytes(row.text_bytes), row.media_files ? `${row.media_files} ${t('db.files')}` : '',
@@ -700,7 +736,14 @@ function renderCacheTools() {
           class: 'btn', text: t('cache.upgrade'), disabled: state.job.running,
           onclick: async () => { if (await confirmBox(t('cache.upgrade_confirm'))) start('upgrade_cache'); },
         })),
-        el('div', { class: 'field-help', text: t('cache.upgrade_desc') }))));
+        el('div', { class: 'field-help', text: t('cache.upgrade_desc') })),
+      el('div', { class: 'field' },
+        el('div', { class: 'field-label' }, el('label', { text: t('cache.offline_title') })),
+        el('div', { class: 'cache-row' }, el('button', {
+          class: 'btn', text: t('cache.offline_refresh'), disabled: state.job.running,
+          onclick: async () => { if (await confirmBox(t('cache.offline_confirm'))) start('refresh_offline'); },
+        })),
+        el('div', { class: 'field-help', text: t('cache.offline_desc') }))));
 }
 
 function finishText(job) {

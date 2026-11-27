@@ -26,7 +26,7 @@ The easiest and safest way from Python is the library interface (`from app impor
   - contains `<!--entry:ID-->`: a Lexin result. Replace each placeholder with the entry's HTML (`zlib.decompress(entries.html)` for that `id`). Text between placeholders, such as `<div class="lexin-form-note">gikk → <b>gå</b></div>`, is kept as is.
   - otherwise: the full HTML (other dictionaries).
 - `sound` — Anki sound tag of the headword pronunciation, e.g. `[sound:lexin_no_hus_699f41dd2d.mp3]`, or empty.
-- `documents` — JSON list: where the result came from (`url`), original page HTML or a reference to it (`entry`), and for answers built offline `{"offline_forms": true}`.
+- `documents` — JSON list: where the result came from (`url`), original page HTML or a reference to it (`entry`), and for answers built offline `{"offline_forms": true}` (with `"lexin_missed": true` when Lexin was asked and had no match).
 - `saved_at` — UTC time stamp.
 
 ### Status of a result

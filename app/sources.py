@@ -186,6 +186,7 @@ class SourceContext:
         self.last_cache_hit = False
         self.last_not_found = False
         self.last_offline = False
+        self.last_lexin_missed = False
         if self.dictionary_cache is None:
             return loader()
         key = cache_key(name, word, self.config, audio, key_extra)
@@ -450,15 +451,31 @@ class SourceContext:
         a_infinitive = marker == 'verb' and len(lookup) > 2 and lookup.endswith('a')
         return self.cache_result(
             'lexin', lookup,
-            lambda: (not a_infinitive and self._lexin_offline(lookup, word)) or self._lexin(lookup, number, audio, a_infinitive, word),
+            lambda: self._lexin_with_index(lookup, number, audio, a_infinitive, word),
             audio, key_extra='a_infinitive' if a_infinitive else None, alias=word)
 
-    def _lexin_offline(self, word, written):
+    def _lexin_with_index(self, word, number, audio, a_infinitive, written):
+        """Form index first when offline_forms is on; otherwise Lexin, and the index only when Lexin
+        answered and has no match for an inflected form the saved entries know (grip -> gripe)."""
+        if not a_infinitive:
+            content = self._lexin_offline(word, written)
+            if content:
+                return content
+        content = self._lexin(word, number, audio, a_infinitive, written)
+        if not content and self.definitely_absent and not a_infinitive:  # Never after an error or timeout.
+            fallback = self._lexin_offline(word, written, lexin_missed=True)
+            if fallback:
+                self.definitely_absent = False
+                return fallback
+        return content
+
+    def _lexin_offline(self, word, written, lexin_missed=False):
         """An inflected form answered from stored entries (gikk -> the saved entries of gå), without
-        opening Lexin. '' when the form index cannot answer; the word is then looked up as usual."""
+        opening Lexin. '' when the form index cannot answer; the word is then looked up as usual.
+        lexin_missed: Lexin was asked and found nothing, so offline_forms does not apply."""
         settings = self.config.section('sources').get('lexin', {})
         variant = settings.get('variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
-        if (self.dictionary_cache is None or not settings.get('offline_forms', True) or variant == 'both'
+        if (self.dictionary_cache is None or not (lexin_missed or settings.get('offline_forms', True)) or variant == 'both'
                 or not lexin_form_entries(self.config)
                 or self.config.data.get('dictionary_cache', {}).get('refresh', False)):
             return ''
@@ -483,7 +500,9 @@ class SourceContext:
         self.lexin_results[written] = (content, '')
         self.lexin_audio_attempted.add(written)
         if self.cache_capture is not None:
-            self.cache_capture['documents'].append({'offline_forms': True, 'entries': [e['id'] for e in entries]})
+            self.cache_capture['documents'].append({'offline_forms': True, 'lexin_missed': lexin_missed,
+                                                    'entries': [e['id'] for e in entries]})
+        self.last_lexin_missed = lexin_missed
         self.last_offline = True
         return content
 

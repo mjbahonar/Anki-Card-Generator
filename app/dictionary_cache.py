@@ -7,6 +7,7 @@ stored entry, which lets an inflected form be answered without a Lexin lookup.
 """
 import hashlib
 import html
+import html as htmllib  # Inside methods "html" is often a local variable.
 import json
 import re
 from pathlib import Path
@@ -62,6 +63,7 @@ ENTRY_START = '<div class="gt-container'
 ENTRY_SPLIT = re.compile(r'(?=<div class="lexin-form-note">)|(?=<div class="gt-container)')
 ENTRY_REF = re.compile(r'<!--entry:([0-9a-f]{64})-->')
 LEXIN_ID = re.compile(r'ordbank-speaker-id-(\d+)')
+TAG = re.compile(r'<[^>]+>')  # For comparing entries by the text a card shows.
 
 
 def pack(text):
@@ -216,6 +218,7 @@ class DictionaryCache:
             for item in info['sources']:
                 item['text_bytes'] += stored.get(item['source']) or 0  # Shared, compressed Lexin entries.
             info['entries'] = db.execute('SELECT COUNT(*) FROM entries').fetchone()[0]
+            info['forms'] = db.execute('SELECT COUNT(DISTINCT form) FROM entry_forms').fetchone()[0]
             info['results'] = sum(s['results'] for s in info['sources'])
             info['not_found'] = sum(s['not_found'] for s in info['sources'])
             info['indirect'] = sum(s['indirect'] for s in info['sources'])
@@ -270,7 +273,7 @@ class DictionaryCache:
                 '(SELECT COALESCE(SUM(LENGTH(e.html) + LENGTH(e.raw)), 0) FROM result_entries re '
                 'JOIN entries e ON e.id = re.entry_id WHERE re.key = r.key), '
                 'CASE WHEN r.content LIKE \'%lexin-form-note%\' THEN r.content ELSE \'\' END, '
-                'r.documents LIKE \'%"offline_forms": true%\', '
+                'r.documents LIKE \'%"offline_forms": true%\', r.documents LIKE \'%"lexin_missed": true%\', '
                 '(SELECT COUNT(*) FROM result_media m WHERE m.key = r.key), '
                 '(SELECT COALESCE(SUM(LENGTH(a.data)), 0) FROM result_media m JOIN assets a USING(digest) WHERE m.key = r.key) '
                 'FROM results r' + clause + ' ORDER BY r.word COLLATE NOCASE, r.source LIMIT ? OFFSET ?', args + [int(limit), int(offset)]).fetchall()
@@ -278,9 +281,9 @@ class DictionaryCache:
             db.close()
         return {'total': total, 'rows': [
             {'key': key, 'word': word, 'source': src, 'not_found': bool(missing), 'saved_at': saved,
-             'indirect': indirect_bases(note), 'offline': bool(offline), 'text_bytes': text or 0,
-             'media_files': files, 'media_bytes': size}
-            for key, word, src, missing, saved, text, note, offline, files, size in rows]}
+             'indirect': indirect_bases(note), 'offline': bool(offline), 'lexin_missed': bool(missed),
+             'text_bytes': text or 0, 'media_files': files, 'media_bytes': size}
+            for key, word, src, missing, saved, text, note, offline, missed, files, size in rows]}
 
     def entry(self, key):
         """One cached result: its card HTML and the media file names it restores."""
@@ -510,9 +513,34 @@ class DictionaryCache:
             db.close()
         return converted, totals[0], totals[1]
 
+    def form_info(self, word):
+        """What the form index knows about a word: whether it is a stored headword (and its forms),
+        and which stored headwords list it as an inflected form."""
+        info = {'word': word, 'key': normalize_headword(word), 'headword': [], 'bases': []}
+        if not self.path.is_file() or not info['key']:
+            return info
+        db = self.connect()
+        try:
+            for variant, in db.execute('SELECT DISTINCT variant FROM entries WHERE headword_key=? ORDER BY variant',
+                                       (info['key'],)):
+                forms = [f for (f,) in db.execute(
+                    'SELECT DISTINCT f.form FROM entry_forms f JOIN entries e ON e.id = f.entry_id '
+                    'WHERE e.headword_key=? AND e.variant=? ORDER BY f.form', (info['key'], variant))]
+                meanings = db.execute('SELECT COUNT(*) FROM entries WHERE headword_key=? AND variant=?',
+                                      (info['key'], variant)).fetchone()[0]
+                info['headword'].append({'variant': variant, 'forms': forms, 'entries': meanings})
+            info['bases'] = [{'headword': h, 'variant': v, 'entries': n} for h, v, n in db.execute(
+                'SELECT e.headword, e.variant, COUNT(DISTINCT e.id) FROM entry_forms f JOIN entries e ON e.id = f.entry_id '
+                'WHERE f.form=? AND e.headword_key != ? GROUP BY e.headword, e.variant ORDER BY e.headword',
+                (info['key'], info['key']))]
+        finally:
+            db.close()
+        return info
+
     def form_entries(self, form, variant):
         """Stored entries whose inflection table holds form, when form is not itself a stored headword.
-        One entry per Lexin entry (the newest copy). [] when the index cannot answer."""
+        One entry per meaning (the newest copy, with table audio when there is one). [] when the index
+        cannot answer."""
         if not self.path.is_file():
             return []
         key = normalize_headword(form)
@@ -522,14 +550,18 @@ class DictionaryCache:
                 return []  # The word is a headword itself: Lexin's own result is needed.
             rows = db.execute('SELECT e.id, e.headword, e.lexin_id, e.html FROM entry_forms f JOIN entries e ON e.id = f.entry_id '
                               'WHERE f.form=? AND e.variant=? ORDER BY e.saved_at DESC', (key, variant)).fetchall()
-            chosen, seen = [], set()
-            for entry_id, headword, lexin_id, blob in rows:
-                identity = lexin_id or entry_id
-                if identity not in seen:
-                    seen.add(identity)
-                    media = db.execute('SELECT m.filename, m.kind, a.data FROM entry_media m JOIN assets a USING(digest) '
-                                       'WHERE m.entry_id=?', (entry_id,)).fetchall()
-                    chosen.append({'id': entry_id, 'headword': headword, 'html': unpack(blob), 'media': media})
-            return sorted(chosen, key=lambda e: (normalize_headword(e['headword']), e['id']))
+            # One entry per meaning. lexin_id is the headword's pronunciation id, shared by all its meanings,
+            # so it cannot tell meanings apart; the visible text can. Copies with the same text (for
+            # example with and without table-audio buttons) are one meaning: keep the one with audio.
+            chosen = {}
+            for entry_id, headword, _lexin_id, blob in rows:
+                html = unpack(blob)
+                identity = ' '.join(htmllib.unescape(TAG.sub(' ', html)).split())
+                if identity in chosen and ('<audio' not in html or '<audio' in chosen[identity]['html']):
+                    continue
+                media = db.execute('SELECT m.filename, m.kind, a.data FROM entry_media m JOIN assets a USING(digest) '
+                                   'WHERE m.entry_id=?', (entry_id,)).fetchall()
+                chosen[identity] = {'id': entry_id, 'headword': headword, 'html': html, 'media': media}
+            return sorted(chosen.values(), key=lambda e: (normalize_headword(e['headword']), e['id']))
         finally:
             db.close()

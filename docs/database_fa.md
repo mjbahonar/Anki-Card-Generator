@@ -26,7 +26,7 @@
   - شامل `<!--entry:ID-->`: نتیجهٔ Lexin. هر ارجاع را با HTML مدخل جایگزین کنید (`zlib.decompress(entries.html)` برای همان `id`). متن بین ارجاع‌ها، مثل `<div class="lexin-form-note">gikk → <b>gå</b></div>`، همان‌طور می‌ماند.
   - در بقیهٔ حالت‌ها: HTML کامل (دیکشنری‌های دیگر).
 - `sound`: برچسب صدای تلفظ کلمه در Anki، مثل `[sound:lexin_no_hus_699f41dd2d.mp3]`، یا خالی.
-- `documents`: فهرست JSON از منشأ نتیجه (`url`)، HTML اصلی صفحه یا ارجاع به آن (`entry`)، و برای جواب‌های آفلاین `{"offline_forms": true}`.
+- `documents`: فهرست JSON از منشأ نتیجه (`url`)، HTML اصلی صفحه یا ارجاع به آن (`entry`)، و برای جواب‌های آفلاین `{"offline_forms": true}` (همراه با `"lexin_missed": true` وقتی از Lexin پرسیده شد و چیزی پیدا نکرد).
 - `saved_at`: زمان ذخیره (UTC).
 
 ### وضعیت هر نتیجه

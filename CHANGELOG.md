@@ -1,5 +1,15 @@
 # Release notes
 
+## v5.13.0 — 2026-11-27
+
+- Fixed offline answers keeping only one meaning of a word with several (`gikk` showed one of the meanings of *gå*): meanings are now told apart by their text, not by Lexin's pronunciation id, which all meanings share; of copies with the same text the one with table audio is used. Checked against 1,869 saved online results: none lost a meaning, 237 gained meanings beyond Lexin's first three results. No offline answers had been saved yet.
+- When Lexin answers but has no match and the saved entries know the word as an inflected form (`grip` → *gripe*, `tell` → *telle*, beyond Lexin's first results), the form index answers, marked offline (*Lexin had no match*), whatever `offline_forms` is. Never after a timeout or error.
+- Added **Fetch all offline answers again** (Database page) and `python main.py --refresh-offline`: asks Lexin again for every answer built offline, one word at a time; Stop keeps the rest for later.
+- Database guide: `documents` of an offline answer also say `"lexin_missed": true` when Lexin was asked first.
+- Database page: tiles for stored entries and indexed word forms, and a **Word forms** box: type a word to see the base word of an inflected form (`gikk` → *gå*) or all saved forms of a base word (`hus`: *huset, husa, husene*).
+- Compatibility: backward-compatible minor release. No configuration, CLI (one new option), database layout, Anki or `app.api` changes.
+- Validation: full automated test suite on a clean copy of this commit, `python main.py --check`, `git diff --check` and the flash-cards tests. On the real database: **Fetch all offline answers again** asked Lexin for all 391 offline answers (389 found, 2 not in Lexin, 0 left offline); `grip` and `tell`, which Lexin's search does not match, were answered from the index as *gripe* and *telle*. The Word forms lookup is covered by the GUI tests.
+
 ## v5.12.0 — 2026-11-27
 
 - Versions of an entry that differ only in Lexin's search marks (highlighted search word, read-aloud and matched-row marks; not styled on cards) are stored once; card HTML no longer contains those marks.

@@ -1,5 +1,6 @@
 """Unified application. Edit config.toml, then run python main.py."""
 import argparse
+from collections import Counter
 import signal
 from contextlib import nullcontext
 from datetime import datetime
@@ -245,6 +246,8 @@ def run(config, context_factory=SourceContext):
                                           or getattr(context, 'last_offline', False))
                             if getattr(context, 'last_cache_hit', False):
                                 print('  CACHE reused saved dictionary result', flush=True)
+                            elif getattr(context, 'last_lexin_missed', False):
+                                print('  CACHE Lexin had no match; inflected form built from saved entries', flush=True)
                             elif getattr(context, 'last_offline', False):
                                 print('  CACHE inflected form built from saved entries (no lookup)', flush=True)
                             for issue in context.errors[previous:]:
@@ -359,6 +362,43 @@ def upgrade_cache(config_path):
     return 0
 
 
+def refresh_offline(config_path):
+    """Ask Lexin again for every result that was built offline from saved entries, one word at a time.
+    Stop (or Ctrl+C) finishes the current word; the rest stay offline and can be refreshed later."""
+    from app import api
+    from app.dictionary_cache import DictionaryCache
+    config = load_config(config_path, check_files=False)
+    config.data['sources'].get('lexin', {})['offline_forms'] = False  # This is about asking Lexin.
+    store = DictionaryCache(config.resolve(config.data['dictionary_cache']['path']))
+    rows = [row for row in store.search(source='lexin', status='offline', limit=1_000_000)['rows']
+            if not row.get('lexin_missed')]
+    words = list(dict.fromkeys(row['word'] for row in rows))
+    if not words:
+        print('No offline answers to refresh.')
+        return 0
+    if 'lexin' not in api.enabled_sources(config):
+        print('Lexin is not enabled in config.toml; enable it to refresh offline answers.')
+        return 1
+    print(f'Refreshing {len(words)} offline answers from Lexin ...', flush=True)
+    counts = Counter()
+    try:
+        with api.Lookup(config) as lookup, StopRequest() as stop:
+            for number, word in enumerate(words, 1):
+                stop.check()
+                print(f'[{number}/{len(words)}] {word}', flush=True)
+                store.delete_keys([row['key'] for row in rows if row['word'] == word])
+                item = lookup.word(word, sources=['lexin'], audio=False).source('lexin')
+                bases = next((r['indirect'] for r in store.search(word, 'lexin')['rows'] if r['word'] == word), [])
+                counts[item.status] += 1
+                print(f'  {item.status.upper():<5} lexin' + (f' -> {", ".join(bases)}' if bases else '')
+                      + (f' | {item.message}' if item.status == 'fail' else ''), flush=True)
+    except KeyboardInterrupt:
+        print(f'Stopped after {sum(counts.values())} of {len(words)} words; the rest stay offline.', flush=True)
+        return 2
+    print(f'Done: {counts["ok"]} found, {counts["empty"]} not in Lexin, {counts["fail"]} failed.', flush=True)
+    return 0 if not counts['fail'] else 1
+
+
 def refresh_word(config_path, word, source=None):
     """Forget one word's cached results (all settings variants) and fetch it again now."""
     from app import api
@@ -402,6 +442,8 @@ def main(argv=None):
                        help='Delete every cached result of one dictionary and shrink the cache file')
     modes.add_argument('--refresh-word', metavar='WORD',
                        help="Delete one word's cached results and look it up again now (enabled dictionaries)")
+    modes.add_argument('--refresh-offline', action='store_true',
+                       help='Look up every answer built offline from saved entries again in Lexin')
     modes.add_argument('--upgrade-cache', action='store_true',
                        help='Store saved Lexin entries once and compressed (a backup is made first)')
     modes.add_argument('--gui', action='store_true', help='Open the settings window for config.toml')
@@ -447,6 +489,8 @@ def main(argv=None):
             return refresh_word(args.config, args.refresh_word, args.source)
         if args.upgrade_cache:
             return upgrade_cache(args.config)
+        if args.refresh_offline:
+            return refresh_offline(args.config)
         config = load_config(args.config)
         if args.check:
             records, skipped = read_records(config)

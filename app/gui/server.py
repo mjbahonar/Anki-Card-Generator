@@ -264,6 +264,8 @@ def make_handler(app, port_holder):
                     return self._send(HTTPStatus.OK, app.cache().search(
                         params.get('q', ''), params.get('source') or None, status,
                         limit=min(int(params.get('limit', 100)), 500), offset=max(0, int(params.get('offset', 0)))))
+                if route == '/api/db/forms':
+                    return self._send(HTTPStatus.OK, app.cache().form_info(params.get('q', '').strip()[:200]))
                 if route == '/api/db/entry':
                     entry = app.cache().entry(params.get('key', ''))
                     return self._send(HTTPStatus.OK if entry else HTTPStatus.NOT_FOUND, entry or {'error': 'Not found'})
@@ -302,6 +304,8 @@ def make_handler(app, port_holder):
                         if source is not None and source not in SOURCE_SPECS:
                             raise ValueError('Unknown dictionary')
                         extra = ['--refresh-word=' + word] + (['--source', source] if source else [])
+                    elif kind == 'refresh_offline':
+                        extra = ['--refresh-offline']
                     elif kind == 'upgrade_cache':
                         extra = ['--upgrade-cache']
                     elif kind == 'clear_cache':
