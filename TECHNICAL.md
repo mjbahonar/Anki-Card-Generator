@@ -238,6 +238,16 @@ For Norwegian input, a leading `å`, `en`, `ei` or `et` and a final `!` are remo
 
 `[cards.normal] show_markers` (default `true`) shows the text as written on the card front; `false` shows only the word (`skål`, `kjøpe`). The note identity always uses the text as written, so toggling it updates the same notes. Audio follows the front: Lexin's recording of the word when Lexin has it, otherwise text-to-speech of what the card shows.
 
+### Shared Lexin entries and offline inflected forms
+
+Each Lexin entry (for example *gå*, verb) is stored once, compressed, in the `entries` table, together with the original page HTML. A Lexin result's `content` keeps its `gikk → gå` notes and holds an `<!--entry:ID-->` placeholder per entry; it is expanded when read, so cards get exactly the HTML that was fetched. `gikk`, `gått` and `går` therefore share one copy of *gå* instead of storing it three times. `entry_forms` indexes every form in every stored entry's inflection table.
+
+With `sources.lexin.offline_forms = true` (default), an inflected form that was never looked up is answered from that index without opening Lexin: `gikk` is built from the saved entries of *gå*. This only happens when the word is not itself a stored headword and `variant` is not `"both"`. Such results are marked *offline* on the Database page (filter **Offline**, badge `Offline → gå`). They can miss a meaning whose entry was never saved (for example *dokumenter*, also the imperative of *dokumentere*); **Fetch again** asks Lexin. `false` always asks Lexin.
+
+Results saved before 5.12.0 keep their old layout until you run **Upgrade storage** on the Database page or `python main.py --upgrade-cache`. It first copies the database to `dictionaries.before-<version>.sqlite3`, then converts every Lexin result (reading back exactly the same HTML) and compacts the file. Versions of an entry that differ only in Lexin's search marks (the highlighted search word, read-aloud and matched-row marks, which cards do not show) are stored once. On a real 340 MB cache the stored Lexin text went from 163 MB to about 15 MB (6,667 → 5,001 entries) and the file to 213 MB; most of the rest is audio backups.
+
+For reading the database from other programs (a bot or a website), see the [database guide](docs/database.md) ([فارسی](docs/database_fa.md)); `--upgrade-cache` also copies it next to the database file.
+
 ### Inflected forms in Lexin
 
 When Lexin has no exact headword for the input (for example *gikk*, *husene*, *bøker*, *større*), the first `sources.lexin.form_entries` results (default 3; `0` = off) are checked for the input in their inflection table. Matching entries are used with a short note above them, such as `gikk → gå`; when several base words fit (*bøker*: *bøk* and *bok*), all are shown. Related results that only mention the form in an example are not matched. The Lexin headword recording says the base word, so for an inflected form the card's pronunciation comes from the next provider in `[audio.word]` (for example Google TTS saying *gikk*). An exact headword always wins.

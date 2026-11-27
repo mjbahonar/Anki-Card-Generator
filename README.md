@@ -2,7 +2,7 @@
 
 Turn your Excel list into a ready-to-import Anki deck, with dictionary meanings, examples and pronunciation. Start with words alone, or add typing, speaking, listening and gap exercises in the same workbook.
 
-[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.11.2**
+[راهنمای فارسی](README_fa.md) · [Technical guide](TECHNICAL.md) · [Release notes](CHANGELOG.md) · **v5.12.0**
 
 ## How it works
 
@@ -78,5 +78,7 @@ You can also enable images, select and reorder dictionaries, and export a playab
 ## Need help?
 
 Run `python main.py --check` to validate your setup. For a missing browser, repeat the Chromium installation command above. Source failures are recorded in `Output/*_errors.json`.
+
+To use the saved dictionary data from your own programs (a bot or a website), see the [database guide](docs/database.md).
 
 See the [technical guide](TECHNICAL.md) for the dictionary catalog, advanced settings, audio, Anki compatibility, troubleshooting, cache maintenance and development. Version changes and migrations are in the [release notes](CHANGELOG.md).

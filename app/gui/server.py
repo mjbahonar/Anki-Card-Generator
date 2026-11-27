@@ -259,7 +259,7 @@ def make_handler(app, port_holder):
                     return self._send(HTTPStatus.OK, app.cache().stats())
                 if route == '/api/db/search':
                     status = params.get('status') or None
-                    if status not in (None, 'found', 'indirect', 'not_found'):
+                    if status not in (None, 'found', 'indirect', 'offline', 'not_found'):
                         raise ValueError('Unknown status filter')
                     return self._send(HTTPStatus.OK, app.cache().search(
                         params.get('q', ''), params.get('source') or None, status,
@@ -275,6 +275,10 @@ def make_handler(app, port_holder):
 
         def do_POST(self):
             if not self._authorized():
+                # Read the unwanted body first: replying with it unread can reset the connection on Windows.
+                length = int(self.headers.get('Content-Length') or 0)
+                if 0 < length <= 2_000_000:
+                    self.rfile.read(length)
                 return self._send(HTTPStatus.FORBIDDEN, {'error': 'Missing or wrong session token'})
             try:
                 body = self._body()
@@ -298,6 +302,8 @@ def make_handler(app, port_holder):
                         if source is not None and source not in SOURCE_SPECS:
                             raise ValueError('Unknown dictionary')
                         extra = ['--refresh-word=' + word] + (['--source', source] if source else [])
+                    elif kind == 'upgrade_cache':
+                        extra = ['--upgrade-cache']
                     elif kind == 'clear_cache':
                         from app.sources import SOURCE_SPECS
                         source = body.get('source')
@@ -319,7 +325,7 @@ def make_handler(app, port_holder):
                         return self._send(HTTPStatus.OK, {'removed': cache.delete_keys(keys)})
                     if self.path == '/api/db/delete_matching':
                         status = body.get('status') or None
-                        if status not in (None, 'found', 'indirect', 'not_found'):
+                        if status not in (None, 'found', 'indirect', 'offline', 'not_found'):
                             raise ValueError('Unknown status filter')
                         return self._send(HTTPStatus.OK, {'removed': cache.delete_matching(
                             str(body.get('q') or ''), body.get('source') or None, status)})

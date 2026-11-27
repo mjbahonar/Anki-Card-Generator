@@ -185,6 +185,7 @@ class SourceContext:
         from app.dictionary_cache import cache_key
         self.last_cache_hit = False
         self.last_not_found = False
+        self.last_offline = False
         if self.dictionary_cache is None:
             return loader()
         key = cache_key(name, word, self.config, audio, key_extra)
@@ -447,8 +448,44 @@ class SourceContext:
         from app.lexin_scraper import split_lookup
         lookup, marker = split_lookup(word, self.language)
         a_infinitive = marker == 'verb' and len(lookup) > 2 and lookup.endswith('a')
-        return self.cache_result('lexin', lookup, lambda: self._lexin(lookup, number, audio, a_infinitive, word),
-                                 audio, key_extra='a_infinitive' if a_infinitive else None, alias=word)
+        return self.cache_result(
+            'lexin', lookup,
+            lambda: (not a_infinitive and self._lexin_offline(lookup, word)) or self._lexin(lookup, number, audio, a_infinitive, word),
+            audio, key_extra='a_infinitive' if a_infinitive else None, alias=word)
+
+    def _lexin_offline(self, word, written):
+        """An inflected form answered from stored entries (gikk -> the saved entries of gå), without
+        opening Lexin. '' when the form index cannot answer; the word is then looked up as usual."""
+        settings = self.config.section('sources').get('lexin', {})
+        variant = settings.get('variant', 'nynorsk' if self.language == 'nn' else 'bokmal')
+        if (self.dictionary_cache is None or not settings.get('offline_forms', True) or variant == 'both'
+                or not lexin_form_entries(self.config)
+                or self.config.data.get('dictionary_cache', {}).get('refresh', False)):
+            return ''
+        try:
+            entries = self.dictionary_cache.form_entries(word, variant)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            self.issue(written, 'dictionary_cache', exc)
+            return ''
+        if not entries:
+            return ''
+        from app.lexin_scraper import clean_entry, form_note
+        for entry in entries:
+            for filename, kind, data in entry['media']:  # Table pronunciations the entry plays.
+                if kind != 'audio' or Path(filename).name != filename:
+                    continue
+                path = self.audio_dir / filename
+                if not path.is_file():
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(data)
+                self.register_audio(path)
+        content = ''.join(form_note(word, entry['headword']) + clean_entry(entry['html']) for entry in entries)
+        self.lexin_results[written] = (content, '')
+        self.lexin_audio_attempted.add(written)
+        if self.cache_capture is not None:
+            self.cache_capture['documents'].append({'offline_forms': True, 'entries': [e['id'] for e in entries]})
+        self.last_offline = True
+        return content
 
     def _lexin(self, word, number, audio=False, a_infinitive=False, written=None):
         written = written or word

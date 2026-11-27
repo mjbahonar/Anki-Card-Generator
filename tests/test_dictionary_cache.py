@@ -284,8 +284,10 @@ class CacheTests(unittest.TestCase):
         self.assertIn('married', first)
         self.assertNotIn('present', first)
         with closing(sqlite3.connect(ctx.dictionary_cache.path)) as db:
-            content, documents = db.execute('SELECT content, documents FROM results').fetchone()
-        self.assertEqual(content, first)
+            key, content, documents = db.execute('SELECT key, content, documents FROM results').fetchone()
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM entries').fetchone()[0], 2)  # Stored once each.
+        self.assertEqual(content.count('<!--entry:'), 2)
+        self.assertEqual(ctx.dictionary_cache.entry(key)['content'], first)  # Expands to the exact HTML.
         self.assertEqual(len(json.loads(documents)), 2)
         other = self.context(ctx.config.data)
         with patch.object(other, 'page', side_effect=AssertionError('Cache must not open browser')):

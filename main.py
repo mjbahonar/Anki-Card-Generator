@@ -241,9 +241,12 @@ def run(config, context_factory=SourceContext):
                             if getattr(context, 'last_not_found', False):
                                 print(f'  CACHE not in {name} (saved earlier); recheck with --refresh-word', flush=True)
                         else:
-                            report.source(name, 'OK', started, cached=getattr(context, 'last_cache_hit', False))
+                            report.source(name, 'OK', started, cached=getattr(context, 'last_cache_hit', False)
+                                          or getattr(context, 'last_offline', False))
                             if getattr(context, 'last_cache_hit', False):
                                 print('  CACHE reused saved dictionary result', flush=True)
+                            elif getattr(context, 'last_offline', False):
+                                print('  CACHE inflected form built from saved entries (no lookup)', flush=True)
                             for issue in context.errors[previous:]:
                                 print(f'  WARN  {issue["source"]}: {concise(issue["message"])}', flush=True)
                     except Exception as exc:
@@ -324,6 +327,38 @@ def run(config, context_factory=SourceContext):
     return 2 if interrupted else (1 if failures or fatal else 0)
 
 
+def upgrade_cache(config_path):
+    """Back up the dictionary cache, move Lexin results into the shared compressed entry store, compact."""
+    import shutil
+    import tomllib
+    from app.app_config import Config
+    from app.dictionary_cache import DictionaryCache
+    path = Path(config_path).resolve()
+    with path.open('rb') as stream:
+        data = tomllib.load(stream)
+    config = Config(path, data)
+    store = DictionaryCache(config.resolve(data.get('dictionary_cache', {}).get('path', 'Cache/dictionaries.sqlite3')))
+    if not store.path.is_file():
+        print(f'No dictionary cache at {store.path}; nothing to upgrade.')
+        return 0
+    backup = store.path.with_name(f'{store.path.stem}.before-{VERSION}{store.path.suffix}')
+    if not backup.exists():
+        print(f'Backing up {store.path.name} to {backup.name} ...', flush=True)
+        shutil.copy2(store.path, backup)
+    before = store.path.stat().st_size
+    print('Moving Lexin results into the shared entry store ...', flush=True)
+    converted, entries, forms = store.upgrade(lambda done, total: print(f'  {done}/{total} results', flush=True))
+    print('Compacting the database file ...', flush=True)
+    _, after = store.compact()
+    for name, target in (('database.md', 'DATABASE.md'), ('database_fa.md', 'DATABASE_fa.md')):
+        guide = Path(__file__).with_name('docs') / name
+        if guide.is_file():  # How to read the file from other programs, next to the file itself.
+            shutil.copyfile(guide, store.path.parent / target)
+    print(f'Upgraded {converted} Lexin results: {entries} stored entries, {forms} indexed word forms.')
+    print(f'Database file: {before / 1e6:.1f} MB -> {after / 1e6:.1f} MB. Backup: {backup}')
+    return 0
+
+
 def refresh_word(config_path, word, source=None):
     """Forget one word's cached results (all settings variants) and fetch it again now."""
     from app import api
@@ -332,6 +367,7 @@ def refresh_word(config_path, word, source=None):
     if not word:
         raise ConfigError('--refresh-word word must not be blank')
     config = load_config(config_path, check_files=False)  # No workbook needed for one word.
+    config.data['sources'].get('lexin', {})['offline_forms'] = False  # "Look it up again" means ask Lexin.
     cache = config.data['dictionary_cache']
     removed = DictionaryCache(config.resolve(cache['path'])).delete_word(word, source)
     print(f'Removed {removed} cached results for {word!r} ({source or "all sources"}).', flush=True)
@@ -366,6 +402,8 @@ def main(argv=None):
                        help='Delete every cached result of one dictionary and shrink the cache file')
     modes.add_argument('--refresh-word', metavar='WORD',
                        help="Delete one word's cached results and look it up again now (enabled dictionaries)")
+    modes.add_argument('--upgrade-cache', action='store_true',
+                       help='Store saved Lexin entries once and compressed (a backup is made first)')
     modes.add_argument('--gui', action='store_true', help='Open the settings window for config.toml')
     parser.add_argument('--port', type=int, default=0, help='Port for --gui (default: any free port)')
     parser.add_argument('--no-browser', action='store_true', help='With --gui, print the link instead of opening it')
@@ -407,6 +445,8 @@ def main(argv=None):
             return 0
         if args.refresh_word is not None:
             return refresh_word(args.config, args.refresh_word, args.source)
+        if args.upgrade_cache:
+            return upgrade_cache(args.config)
         config = load_config(args.config)
         if args.check:
             records, skipped = read_records(config)

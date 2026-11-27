@@ -577,7 +577,7 @@ async function renderSearch(card, reset) {
   const input = el('input', { type: 'search', id: 'db-q', value: db.q, placeholder: t('db.search_placeholder'), 'aria-label': t('db.search') });
   const source = el('select', { id: 'db-source', 'aria-label': t('db.source') }, el('option', { value: '', text: t('db.all_sources') }),
     (db.sources || []).map((s) => el('option', { value: s, text: sourceName(s), selected: s === db.source })));
-  const status = el('select', { 'aria-label': t('db.status') }, [['', t('db.all')], ['found', t('db.found')], ['indirect', t('db.indirect')], ['not_found', t('db.not_found')]]
+  const status = el('select', { 'aria-label': t('db.status') }, [['', t('db.all')], ['found', t('db.found')], ['indirect', t('db.indirect')], ['offline', t('db.offline')], ['not_found', t('db.not_found')]]
     .map(([v, label]) => el('option', { value: v, text: label, selected: v === db.status })));
   const list = el('div', { class: 'db-rows' });
   const count = el('span', { class: 'hint' });
@@ -604,7 +604,7 @@ async function renderSearch(card, reset) {
     t('db.delete_selected_confirm', { count: db.selected.size })).then((r) => { if (r) db.selected.clear(); }));
   deleteMatching.addEventListener('click', () => {
     const filters = [db.q && `"${db.q}"`, db.source && sourceName(db.source),
-      db.status && t({ not_found: 'db.not_found', indirect: 'db.indirect', found: 'db.found' }[db.status])].filter(Boolean).join(' · ') || t('db.all');
+      db.status && t({ not_found: 'db.not_found', indirect: 'db.indirect', offline: 'db.offline', found: 'db.found' }[db.status])].filter(Boolean).join(' · ') || t('db.all');
     dbAction('/api/db/delete_matching', { q: db.q, source: db.source, status: db.status },
       t('db.delete_matching_confirm', { count: db.total, filters }));
   });
@@ -648,8 +648,9 @@ function renderDbRow(row) {
     } }),
     el('span', { class: 'db-source', text: sourceName(row.source) }),
     el('span', { class: 'badge ' + (row.not_found ? 'warn' : row.indirect.length ? 'info' : 'ok'),
-      title: row.indirect.length ? t('db.indirect_help') : '',
-      text: row.not_found ? t('db.not_found') : row.indirect.length ? t('db.indirect_of', { base: row.indirect.join(', ') }) : t('db.found') }),
+      title: row.offline ? t('db.offline_help') : row.indirect.length ? t('db.indirect_help') : '',
+      text: row.not_found ? t('db.not_found') : row.indirect.length
+        ? t(row.offline ? 'db.offline_of' : 'db.indirect_of', { base: row.indirect.join(', ') }) : t('db.found') }),
     el('span', { class: 'db-meta' }, [formatBytes(row.text_bytes), row.media_files ? `${row.media_files} ${t('db.files')}` : '',
       row.media_files ? formatBytes(row.media_bytes) : '', (row.saved_at || '').slice(0, 16)].filter(Boolean)
       .flatMap((part, i) => [i ? ' · ' : null, el('bdi', { text: part })])),
@@ -692,7 +693,14 @@ function renderCacheTools() {
           if (await confirmBox(t('cache.confirm', { source: name }))) start('clear_cache', { source: select.value });
         },
       })),
-      el('div', { class: 'field-help', text: t('cache.desc') }))));
+      el('div', { class: 'field-help', text: t('cache.desc') })),
+      el('div', { class: 'field' },
+        el('div', { class: 'field-label' }, el('label', { text: t('cache.upgrade_title') })),
+        el('div', { class: 'cache-row' }, el('button', {
+          class: 'btn', text: t('cache.upgrade'), disabled: state.job.running,
+          onclick: async () => { if (await confirmBox(t('cache.upgrade_confirm'))) start('upgrade_cache'); },
+        })),
+        el('div', { class: 'field-help', text: t('cache.upgrade_desc') }))));
 }
 
 function finishText(job) {

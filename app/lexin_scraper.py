@@ -58,6 +58,28 @@ def inflected_forms(entry_html):
     return forms
 
 
+# Lexin marks the searched word inside an entry (<span class="highlight">) and its read-aloud tool
+# adds vFact_* spans. They depend on the search, not the entry, and cards do not style them.
+SEARCH_MARK = re.compile(r'<span class="(?:highlight|vFact[^"]*)">((?:(?!<span\b|</span>).)*)</span>', re.S)
+
+
+# Lexin also marks the inflection-table rows that matched the search: class="... g-row-0 g-row-1".
+ROW_MARK = re.compile(r'class="([^"]*\bg-row-\d+[^"]*)"')
+
+
+def _drop_row_marks(match):
+    kept = [name for name in match.group(1).split() if not re.fullmatch(r'g-row-\d+', name)]
+    return f'class="{" ".join(kept)}"'
+
+
+def clean_entry(entry_html):
+    """The entry without search marks; every other byte is kept, so one entry has one stored form."""
+    previous = None
+    while previous != entry_html:  # Innermost first: the read-aloud marks are nested.
+        previous, entry_html = entry_html, SEARCH_MARK.sub(r'\1', entry_html)
+    return ROW_MARK.sub(_drop_row_marks, entry_html)
+
+
 def form_note(word, base):
     """Short line above an entry found through an inflected form, e.g. "gikk → gå"."""
     return ('<div class="lexin-form-note">' + html.escape(str(word)) + ' → <b>' + html.escape(base)

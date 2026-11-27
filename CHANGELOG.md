@@ -1,5 +1,16 @@
 # Release notes
 
+## v5.12.0 — 2026-11-27
+
+- Versions of an entry that differ only in Lexin's search marks (highlighted search word, read-aloud and matched-row marks; not styled on cards) are stored once; card HTML no longer contains those marks.
+- Lexin entries are stored once and compressed: inflected forms (`gikk`, `gått`, `går`) share one copy of *gå* instead of each saving the whole entry, and the raw page HTML is compressed too. Cards get byte-for-byte the same HTML. New tables `entries`, `result_entries`, `entry_forms` and `entry_media`; a Lexin result's `content` now holds `<!--entry:ID-->` placeholders.
+- Offline inflected forms: with `sources.lexin.offline_forms = true` (default) a form that was never looked up is built from saved entries via the inflection-table index, without opening Lexin, when the word is not itself a saved headword. Marked *Offline* on the Database page (new filter and badge); **Fetch again** / `--refresh-word` always ask Lexin.
+- Added a database guide for other programs (a bot, a website): tables, how to expand Lexin results, inflected form → base word, audio, server notes. `docs/database.md` and `docs/database_fa.md`; `--upgrade-cache` also copies them next to the database.
+- Settings GUI server: a refused request's body is now read before replying, which could otherwise reset the connection on Windows.
+- Added **Upgrade storage** (Database page) and `python main.py --upgrade-cache`: backs up the database, converts results saved before this version, and compacts the file.
+- Compatibility: backward-compatible minor release for configuration, CLI and Anki: `offline_forms` is optional (default `true`), Anki fields, model IDs, note GUIDs and `app.api` are unchanged. The **database layout changes** (`PRAGMA user_version` 3): new results use it automatically; run **Upgrade storage** or `--upgrade-cache` once to convert older results (a backup is made first). Do not open an upgraded database with an older version, which would show `<!--entry:…-->` placeholders. Card HTML no longer contains Lexin's invisible search marks; cards look the same, and re-imported notes may be reported as updated.
+- Validation: full automated test suite on a clean copy of this commit (three consecutive runs), `python main.py --check`, `git diff --check` and the flash-cards tests. On a real 340 MB database: upgrade and merge in about 3 minutes in total, 340 → 213 MB, all 5,408 results identical to the backup apart from the search marks, `integrity_check` ok. Offline answers for 12 never-searched forms matched Lexin online in 10 cases; *dokumenter* missed *dokumentere* (not yet saved) and *passa* added the correct *passe*. The guide's example code was run against the real database.
+
 ## v5.11.2 — 2026-11-26
 
 - Fixed Stop (and Ctrl+C) hanging when pressed while Lexin was loading a page, so nothing was saved and a second Stop ended the run with exit code 1. Stop now asks the run to finish its current step: it is checked before each word, dictionary and audio lookup, then finished words are saved as a `_partial` file. The GUI uses a stop file instead of a console signal, so the browser is not interrupted; jobs started without a stop file (projects that subclass `GuiApp`, such as flash-cards) still get Ctrl+Break. A second press still stops at once.

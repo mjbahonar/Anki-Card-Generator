@@ -147,6 +147,9 @@ STRINGS = {
         'help.input.sheet': 'Worksheet name (for example FINAL) or its position: 0 = first, 1 = second.',
         'help.input.word_column': 'Column header name (needs "First row is a header") or its position: 0 = first column.',
         'field.sources.lexin.form_entries': 'Results checked for inflected forms',
+        'field.sources.lexin.offline_forms': 'Answer inflected forms from saved entries',
+        'help.sources.lexin.offline_forms': 'gikk is answered from the saved entries of gå without opening Lexin, '
+                                            'when gikk is not a headword of its own in the database. false always asks Lexin.',
         'field.sources.lexin.entries': 'Results checked for the exact word',
         'field.cards.normal.show_markers': 'Show å / en / ei / et on the card',
         'file.browse': 'Browse…',
@@ -198,6 +201,10 @@ STRINGS = {
         'db.indirect': 'Indirect',
         'db.indirect_sub': 'Found through an inflected form',
         'db.indirect_of': 'Indirect → {base}',
+        'db.offline': 'Offline (from saved entries)',
+        'db.offline_of': 'Offline → {base}',
+        'db.offline_help': 'Built from entries already in the database, without asking Lexin. It can miss a meaning '
+                           'whose entry was never saved; use Fetch again (or filter and Delete all matching) to ask Lexin.',
         'db.indirect_help': 'Indirect translation: the word is an inflected form; the meaning is the base word\'s entry.',
         'db.forget_all_not_found': 'Recheck all not found ({count})',
         'db.forget_all_confirm': 'Forget all {count} "not found" results? Those words are looked up again on the next run.',
@@ -211,6 +218,13 @@ STRINGS = {
         'cache.desc': 'Delete every cached result of one dictionary and shrink the database. Other dictionaries keep their cache.',
         'cache.source': 'Dictionary',
         'cache.clear': 'Clear cache',
+        'cache.upgrade_title': 'Storage',
+        'cache.upgrade': 'Upgrade storage',
+        'cache.upgrade_desc': 'Stores each Lexin entry once and compressed, and builds the index of inflected forms '
+                              'used for offline answers. A backup copy is made first. Needed once for results saved '
+                              'before 5.12.0; new results are stored this way automatically.',
+        'cache.upgrade_confirm': 'Back up the database and move saved Lexin results into the shared, compressed '
+                                 'entry store? This can take a few minutes for a large database.',
         'cache.confirm': 'Delete all cached results for {source}? They are fetched again the next time this dictionary is used.',
 
         'action.save': 'Save',

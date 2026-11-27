@@ -68,6 +68,7 @@ table_audio = true             # Inflection-table pronunciation only; click to p
 entries = 2                    # First N Lexin results checked; exact headword matches only
 form_entries = 3               # Without an exact headword: first N results checked for an inflected form
                                # (gikk -> gå, husene -> hus); 0 = off
+offline_forms = true           # Answer an unseen inflected form (gikk) from saved entries (gå) without Lexin
 
 # Additional sources: set enabled = true to use one; sections define display order.
 [sources.bokmalsordboka]

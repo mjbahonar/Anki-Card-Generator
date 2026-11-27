@@ -1,12 +1,19 @@
-"""Persistent dictionary results and lossless media backups (stdlib SQLite)."""
+"""Persistent dictionary results and lossless media backups (stdlib SQLite).
+
+Lexin entries are stored once, compressed, in ``entries``; a Lexin result's ``content`` keeps its
+"gikk → gå" notes and an ``<!--entry:ID-->`` placeholder per entry, and is expanded on read, so
+cards get exactly the HTML that was fetched. ``entry_forms`` indexes every inflected form of every
+stored entry, which lets an inflected form be answered without a Lexin lookup.
+"""
 import hashlib
 import html
 import json
 import re
 from pathlib import Path
 import sqlite3
+import zlib
 
-from app.lexin_scraper import normalize_headword
+from app.lexin_scraper import clean_entry, inflected_forms, normalize_headword
 
 
 def cache_key(name, word, config, audio=False, extra=None):
@@ -18,6 +25,7 @@ def cache_key(name, word, config, audio=False, extra=None):
         # form_entries only decides "not found" results, which record it themselves; found results
         # do not depend on it, so it must not change their key (5.8.0-5.9.0 included it by mistake).
         settings.pop('form_entries', None)
+        settings.pop('offline_forms', None)  # How an answer was found, not what it is.
         if extra:
             settings['lookup'] = extra  # e.g. "a_infinitive": "å kjøpa" also shows the verb "kjøpe".
         settings.setdefault('variant', 'nynorsk' if config.data['language']['source'] == 'nn' else 'bokmal')
@@ -50,6 +58,59 @@ def indirect_bases(content):
     return list(dict.fromkeys(html.unescape(m) for m in FORM_NOTE.findall(content or '')))
 
 
+ENTRY_START = '<div class="gt-container'
+ENTRY_SPLIT = re.compile(r'(?=<div class="lexin-form-note">)|(?=<div class="gt-container)')
+ENTRY_REF = re.compile(r'<!--entry:([0-9a-f]{64})-->')
+LEXIN_ID = re.compile(r'ordbank-speaker-id-(\d+)')
+
+
+def pack(text):
+    return zlib.compress(text.encode('utf-8'), 9)
+
+
+def unpack(blob):
+    return zlib.decompress(blob).decode('utf-8')
+
+
+def split_lexin(content, documents):
+    """Split a Lexin result into stored entries.
+
+    Returns (manifest, documents, entries) where manifest is the content with every entry replaced
+    by <!--entry:ID-->, documents point to entries instead of holding their raw HTML, and entries is
+    a list of dicts (id, html, raw, headword, variant, lexin_id). Returns None when the content does
+    not have the expected structure; it is then stored unchanged.
+    """
+    parts = [part for part in ENTRY_SPLIT.split(content) if part]
+    blocks = [part for part in parts if part.startswith(ENTRY_START)]
+    if ''.join(parts) != content or not blocks or ENTRY_REF.search(content):
+        return None
+    with_html = [i for i, d in enumerate(documents) if isinstance(d, dict) and d.get('html')]
+    raws = [documents[i]['html'] for i in with_html] if len(with_html) == len(blocks) else [''] * len(blocks)
+    documents = [dict(d) if isinstance(d, dict) else d for d in documents]
+    from bs4 import BeautifulSoup
+    entries, manifest, number = [], [], 0
+    for part in parts:
+        if not part.startswith(ENTRY_START):
+            manifest.append(part)
+            continue
+        part = clean_entry(part)  # Same entry from different searches -> one stored version.
+        digest = hashlib.sha256(part.encode('utf-8')).hexdigest()
+        soup = BeautifulSoup(part, 'html.parser')
+        lemma = soup.select_one('.grunnform')
+        raw = raws[number]
+        match = LEXIN_ID.search(raw)
+        entries.append({'id': digest, 'html': part, 'raw': raw,
+                        'headword': lemma.get_text(' ', strip=True) if lemma else '',
+                        'variant': 'nynorsk' if soup.select_one('dd[lang="nn"]') else 'bokmal',
+                        'lexin_id': match.group(1) if match else ''})
+        if len(with_html) == len(blocks):
+            documents[with_html[number]] = {k: v for k, v in documents[with_html[number]].items() if k != 'html'}
+            documents[with_html[number]]['entry'] = digest
+        manifest.append(f'<!--entry:{digest}-->')
+        number += 1
+    return ''.join(manifest), documents, entries
+
+
 class DictionaryCache:
     def __init__(self, path):
         self.path = Path(path)
@@ -71,11 +132,66 @@ class DictionaryCache:
                 filename TEXT NOT NULL, kind TEXT NOT NULL,
                 digest TEXT NOT NULL REFERENCES assets(digest),
                 PRIMARY KEY (key, filename, kind));
+            CREATE TABLE IF NOT EXISTS entries (
+                id TEXT PRIMARY KEY, source TEXT NOT NULL, variant TEXT NOT NULL,
+                headword TEXT NOT NULL, headword_key TEXT NOT NULL, lexin_id TEXT NOT NULL,
+                html BLOB NOT NULL, raw BLOB NOT NULL,
+                saved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS result_entries (
+                key TEXT NOT NULL REFERENCES results(key) ON DELETE CASCADE,
+                entry_id TEXT NOT NULL REFERENCES entries(id),
+                PRIMARY KEY (key, entry_id));
+            CREATE INDEX IF NOT EXISTS result_entries_entry ON result_entries(entry_id);
+            CREATE TABLE IF NOT EXISTS entry_forms (
+                form TEXT NOT NULL, entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+                PRIMARY KEY (form, entry_id));
+            CREATE INDEX IF NOT EXISTS entry_forms_entry ON entry_forms(entry_id);
+            CREATE INDEX IF NOT EXISTS result_media_digest ON result_media(digest);
+            CREATE TABLE IF NOT EXISTS entry_media (
+                entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL, kind TEXT NOT NULL, digest TEXT NOT NULL,
+                PRIMARY KEY (entry_id, filename, kind));
+            CREATE INDEX IF NOT EXISTS entry_media_digest ON entry_media(digest);
             ''')
         except Exception:
             db.close()
             raise
         return db
+
+    @staticmethod
+    def _clean(db, assets=True):
+        """Drop entries no result uses, then (unless assets=False) media backups nothing uses."""
+        db.execute('DELETE FROM entries WHERE NOT EXISTS (SELECT 1 FROM result_entries re WHERE re.entry_id = entries.id)')
+        if assets:
+            db.execute('DELETE FROM assets WHERE NOT EXISTS (SELECT 1 FROM result_media m WHERE m.digest = assets.digest) '
+                       'AND NOT EXISTS (SELECT 1 FROM entry_media em WHERE em.digest = assets.digest)')
+
+    @staticmethod
+    def _expand(db, content):
+        """Content with every <!--entry:ID--> replaced by the stored entry; None if one is missing."""
+        ids = ENTRY_REF.findall(content or '')
+        if not ids:
+            return content
+        found = {i: unpack(h) for i, h in db.execute(
+            f'SELECT id, html FROM entries WHERE id IN ({",".join("?" * len(set(ids)))})', list(set(ids)))}
+        if len(found) != len(set(ids)):
+            return None
+        return ENTRY_REF.sub(lambda m: found[m.group(1)], content)
+
+    @staticmethod
+    def _store_entries(db, key, source, entries, backups):
+        for entry in entries:
+            db.execute('INSERT OR IGNORE INTO entries(id, source, variant, headword, headword_key, lexin_id, html, raw) '
+                       'VALUES(?,?,?,?,?,?,?,?)',
+                       (entry['id'], source, entry['variant'], entry['headword'], normalize_headword(entry['headword']),
+                        entry['lexin_id'], pack(entry['html']), pack(entry['raw'])))
+            db.execute('INSERT OR IGNORE INTO result_entries VALUES(?,?)', (key, entry['id']))
+            forms = inflected_forms(entry['html']) | {normalize_headword(entry['headword'])}
+            db.executemany('INSERT OR IGNORE INTO entry_forms VALUES(?,?)',
+                           [(form, entry['id']) for form in forms if form])
+            for filename, kind, digest in backups:
+                if filename in entry['html']:  # Table audio the entry plays.
+                    db.execute('INSERT OR IGNORE INTO entry_media VALUES(?,?,?,?)', (entry['id'], filename, kind, digest))
 
     # Browsing and maintenance (settings GUI). A result with empty content records that the
     # dictionary answered and the word is definitely not in it; later runs skip the lookup.
@@ -96,6 +212,10 @@ class DictionaryCache:
                 info['sources'].append({'source': source, 'results': total, 'not_found': missing or 0,
                                         'indirect': indirect or 0, 'text_bytes': text or 0,
                                         'oldest': oldest, 'newest': newest})
+            stored = dict(db.execute('SELECT source, SUM(LENGTH(html) + LENGTH(raw)) FROM entries GROUP BY source'))
+            for item in info['sources']:
+                item['text_bytes'] += stored.get(item['source']) or 0  # Shared, compressed Lexin entries.
+            info['entries'] = db.execute('SELECT COUNT(*) FROM entries').fetchone()[0]
             info['results'] = sum(s['results'] for s in info['sources'])
             info['not_found'] = sum(s['not_found'] for s in info['sources'])
             info['indirect'] = sum(s['indirect'] for s in info['sources'])
@@ -130,12 +250,15 @@ class DictionaryCache:
         elif status == 'indirect':  # Through an inflected form (gikk → gå).
             where.append('r.content LIKE ?')
             args.append(INDIRECT_MARK)
+        elif status == 'offline':  # Built from stored entries without a Lexin lookup.
+            where.append('r.documents LIKE ?')
+            args.append('%"offline_forms": true%')
         elif status == 'not_found':
             where.append("r.content = ''")
         return (' WHERE ' + ' AND '.join(where)) if where else '', args
 
     def search(self, query='', source=None, status=None, limit=100, offset=0):
-        """Cached results whose word contains query; status is None, 'found', 'indirect' or 'not_found'."""
+        """Cached results whose word contains query; status is None, 'found', 'indirect', 'offline' or 'not_found'."""
         if not self.path.is_file():
             return {'total': 0, 'rows': []}
         clause, args = self._filter(query, source, status)
@@ -143,8 +266,11 @@ class DictionaryCache:
         try:
             total = db.execute('SELECT COUNT(*) FROM results r' + clause, args).fetchone()[0]
             rows = db.execute(
-                'SELECT r.key, r.word, r.source, r.content = \'\', r.saved_at, LENGTH(r.content) + LENGTH(r.documents), '
+                'SELECT r.key, r.word, r.source, r.content = \'\', r.saved_at, LENGTH(r.content) + LENGTH(r.documents) + '
+                '(SELECT COALESCE(SUM(LENGTH(e.html) + LENGTH(e.raw)), 0) FROM result_entries re '
+                'JOIN entries e ON e.id = re.entry_id WHERE re.key = r.key), '
                 'CASE WHEN r.content LIKE \'%lexin-form-note%\' THEN r.content ELSE \'\' END, '
+                'r.documents LIKE \'%"offline_forms": true%\', '
                 '(SELECT COUNT(*) FROM result_media m WHERE m.key = r.key), '
                 '(SELECT COALESCE(SUM(LENGTH(a.data)), 0) FROM result_media m JOIN assets a USING(digest) WHERE m.key = r.key) '
                 'FROM results r' + clause + ' ORDER BY r.word COLLATE NOCASE, r.source LIMIT ? OFFSET ?', args + [int(limit), int(offset)]).fetchall()
@@ -152,8 +278,9 @@ class DictionaryCache:
             db.close()
         return {'total': total, 'rows': [
             {'key': key, 'word': word, 'source': src, 'not_found': bool(missing), 'saved_at': saved,
-             'indirect': indirect_bases(note), 'text_bytes': text or 0, 'media_files': files, 'media_bytes': size}
-            for key, word, src, missing, saved, text, note, files, size in rows]}
+             'indirect': indirect_bases(note), 'offline': bool(offline), 'text_bytes': text or 0,
+             'media_files': files, 'media_bytes': size}
+            for key, word, src, missing, saved, text, note, offline, files, size in rows]}
 
     def entry(self, key):
         """One cached result: its card HTML and the media file names it restores."""
@@ -164,6 +291,7 @@ class DictionaryCache:
             row = db.execute('SELECT word, source, content, sound, saved_at FROM results WHERE key=?', (key,)).fetchone()
             if row is None:
                 return None
+            row = (row[0], row[1], self._expand(db, row[2]) or '', row[3], row[4])
             media = db.execute('SELECT m.filename, m.kind, LENGTH(a.data) FROM result_media m JOIN assets a USING(digest) '
                                'WHERE m.key=? ORDER BY m.kind, m.filename', (key,)).fetchall()
         finally:
@@ -185,8 +313,7 @@ class DictionaryCache:
         try:
             with db:
                 count = sum(db.execute('DELETE FROM results WHERE key=?', (key,)).rowcount for key in keys)
-                db.execute('DELETE FROM assets WHERE NOT EXISTS '
-                           '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+                self._clean(db)
             return count
         finally:
             db.close()
@@ -201,8 +328,7 @@ class DictionaryCache:
             with db:
                 count = db.execute('DELETE FROM results WHERE key IN (SELECT r.key FROM results r' + clause + ')',
                                    args).rowcount
-                db.execute('DELETE FROM assets WHERE NOT EXISTS '
-                           '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+                self._clean(db)
             return count
         finally:
             db.close()
@@ -244,8 +370,7 @@ class DictionaryCache:
             with db:
                 db.executemany('DELETE FROM results WHERE key=?', keys)
                 if keys:
-                    db.execute('DELETE FROM assets WHERE NOT EXISTS '
-                               '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+                    self._clean(db)
             return len(keys)
         finally:
             db.close()
@@ -264,8 +389,7 @@ class DictionaryCache:
                 "WHERE r.source=? AND m.kind='archive'", (source,))}
             with db:
                 count = db.execute('DELETE FROM results WHERE source=?', (source,)).rowcount
-                db.execute('DELETE FROM assets WHERE NOT EXISTS '
-                           '(SELECT 1 FROM result_media WHERE result_media.digest=assets.digest)')
+                self._clean(db)
                 still_used = {name for (name,) in db.execute(
                     "SELECT DISTINCT filename FROM result_media WHERE kind='archive'")}
             db.execute('VACUUM')  # SQLite keeps freed pages until the file is rebuilt.
@@ -307,7 +431,10 @@ class DictionaryCache:
                     temporary.replace(path)
                 if kind != 'archive':
                     ctx.register_media(path)
-            return row[0], row[1], json.loads(row[2])
+            content = self._expand(db, row[0])
+            if content is None:
+                return None  # A stored entry is missing: fetch again.
+            return content, row[1], json.loads(row[2])
         finally:
             db.close()
 
@@ -316,6 +443,9 @@ class DictionaryCache:
         for path, kind in media:
             data = path.read_bytes()
             backups.append((path.name, kind, hashlib.sha256(data).hexdigest(), data))
+        split = split_lexin(content, documents) if source == 'lexin' and content else None
+        if split:
+            content, documents, entries = split
         db = self.connect()
         try:
             with db:
@@ -325,5 +455,81 @@ class DictionaryCache:
                     db.execute('INSERT INTO assets VALUES(?,?) ON CONFLICT(digest) DO UPDATE SET data=excluded.data',
                                (digest, data))
                     db.execute('INSERT INTO result_media VALUES(?,?,?,?)', (key, filename, kind, digest))
+                if split:
+                    self._store_entries(db, key, source, entries, [b[:3] for b in backups])
+                    self._clean(db, assets=False)  # Entries a replaced result used and nothing else does.
+        finally:
+            db.close()
+
+    STORE_VERSION = 3  # PRAGMA user_version: 3 = entries stored once, without search or row marks.
+
+    def upgrade(self, progress=None):
+        """Move Lexin results into the shared, compressed entry store and merge versions of the same entry
+        that differ only in search marks. Returns (results converted, entries stored, forms indexed).
+        Results read back as before, minus the invisible marks. Run compact() afterwards."""
+        if not self.path.is_file():
+            return 0, 0, 0
+        db = self.connect()
+        converted = 0
+        try:
+            merged = db.execute('PRAGMA user_version').fetchone()[0] >= self.STORE_VERSION
+            keys = [k for (k,) in db.execute(
+                "SELECT key FROM results WHERE source='lexin' AND content != ''"
+                + (" AND content NOT LIKE '%<!--entry:%'" if merged else ''))]
+            for start in range(0, len(keys), 200):
+                with db:
+                    for key in keys[start:start + 200]:
+                        content, documents = db.execute('SELECT content, documents FROM results WHERE key=?', (key,)).fetchone()
+                        documents = json.loads(documents)
+                        if ENTRY_REF.search(content):  # Already in the store: rebuild, then store merged.
+                            content = self._expand(db, content)
+                            if content is None:
+                                continue
+                            for document in documents:
+                                if isinstance(document, dict) and document.get('entry'):
+                                    raw = db.execute('SELECT raw FROM entries WHERE id=?', (document['entry'],)).fetchone()
+                                    document.pop('entry')
+                                    document['html'] = unpack(raw[0]) if raw else ''
+                        split = split_lexin(content, documents)
+                        if not split:
+                            continue
+                        manifest, documents, entries = split
+                        media = db.execute('SELECT filename, kind, digest FROM result_media WHERE key=?', (key,)).fetchall()
+                        db.execute('DELETE FROM result_entries WHERE key=?', (key,))
+                        db.execute('UPDATE results SET content=?, documents=? WHERE key=?',
+                                   (manifest, json.dumps(documents, ensure_ascii=False), key))
+                        self._store_entries(db, key, 'lexin', entries, media)
+                        converted += 1
+                if progress:
+                    progress(min(start + 200, len(keys)), len(keys))
+            with db:
+                self._clean(db)
+                db.execute(f'PRAGMA user_version = {self.STORE_VERSION}')
+            totals = db.execute('SELECT (SELECT COUNT(*) FROM entries), (SELECT COUNT(*) FROM entry_forms)').fetchone()
+        finally:
+            db.close()
+        return converted, totals[0], totals[1]
+
+    def form_entries(self, form, variant):
+        """Stored entries whose inflection table holds form, when form is not itself a stored headword.
+        One entry per Lexin entry (the newest copy). [] when the index cannot answer."""
+        if not self.path.is_file():
+            return []
+        key = normalize_headword(form)
+        db = self.connect()
+        try:
+            if db.execute('SELECT 1 FROM entries WHERE headword_key=? AND variant=? LIMIT 1', (key, variant)).fetchone():
+                return []  # The word is a headword itself: Lexin's own result is needed.
+            rows = db.execute('SELECT e.id, e.headword, e.lexin_id, e.html FROM entry_forms f JOIN entries e ON e.id = f.entry_id '
+                              'WHERE f.form=? AND e.variant=? ORDER BY e.saved_at DESC', (key, variant)).fetchall()
+            chosen, seen = [], set()
+            for entry_id, headword, lexin_id, blob in rows:
+                identity = lexin_id or entry_id
+                if identity not in seen:
+                    seen.add(identity)
+                    media = db.execute('SELECT m.filename, m.kind, a.data FROM entry_media m JOIN assets a USING(digest) '
+                                       'WHERE m.entry_id=?', (entry_id,)).fetchall()
+                    chosen.append({'id': entry_id, 'headword': headword, 'html': unpack(blob), 'media': media})
+            return sorted(chosen, key=lambda e: (normalize_headword(e['headword']), e['id']))
         finally:
             db.close()
